@@ -48,11 +48,12 @@ class Tone:
     eq = np.array([3, 1])
 
     @staticmethod
-    def plot(tones, center, weights, min_col=(1, 1, 1), max_col=(1, 0, 0)):
+    def plot(tones, center, weights):
         weights = np.array(weights)
         weights /= np.max(weights)
-        min_col = np.array(min_col)
-        max_col = np.array(max_col)
+
+        cmap = mpl.cm.get_cmap('Reds')
+
         fig, ax = plt.subplots(1, 1, figsize=(15, 10))
         center_x, center_y = [t.loc for t in tones if t.name == center][0]
         x_min = center_x - 5
@@ -72,7 +73,7 @@ class Tone:
                     loc,
                     radius=np.tan(np.pi / 6),
                     resolution=6,
-                    facecolor=w * max_col + (1 - w) * min_col,
+                    facecolor=cmap(w),
                     edgecolor=(0, 0, 0)))
         plt.axis('equal')
         plt.axis('off')
@@ -149,9 +150,9 @@ if __name__ == "__main__":
     tones = [Tone((idx, 0), name) for idx, name in enumerate(lof)]
 
     # path = 'data/Satie_-_Gnossiennes_1.csv'
-    path = 'data/BWV_772.csv'
+    # path = 'data/BWV_772.csv'
     # path = 'data/Salve-Regina_Lasso.csv'
-    # path = 'data/Schubert_90_2.csv'
+    path = 'data/Schubert_90_2.csv'
     # path = 'data/Ravel_-_Miroirs_I.csv'
     # path = 'data/Gesualdo_OVos.csv'
 
@@ -181,22 +182,22 @@ if __name__ == "__main__":
 
     ### PLOT
     # plot optimal parameters
-    x = np.arange(best_params[:-1].shape[0])
-    plt.bar(x, best_params[:-1])
-    plt.xticks(x, ['+P5', '-P5', '+m3', '-m3', '+M3', '-M3'])
-    plt.title(f'Discount: {round(best_params[-1],4)}')
-    plt.show()
+    # x = np.arange(best_params[:-1].shape[0])
+    # plt.bar(x, best_params[:-1])
+    # plt.xticks(x, ['+P5', '-P5', '+m3', '-m3', '+M3', '-M3'])
+    # plt.title(f'Discount: {round(best_params[-1],4)}')
+    # plt.show()
 
     # plot actual distribution
-    fig = tonnetz(
-        piece,
-        colorbar=False,
-        figsize=(12,12),
-        cmap='Reds',
-        nan_color='white',
-        edgecolor='black'
-    )
-    fig.savefig('img/piece_dist.png')
+    # fig = tonnetz(
+    #     piece,
+    #     colorbar=False,
+    #     figsize=(12,12),
+    #     cmap='Reds',
+    #     nan_color='white',
+    #     edgecolor='black'
+    # )
+    # fig.savefig('img/piece_dist.png')
 
     # plot inferred distribution
     Tone.plot(tones, center, weights=best_weights)
