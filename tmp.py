@@ -81,7 +81,7 @@ class Tone:
 
     ### Diffusion
     @staticmethod
-    def diffuse(tones, center, action_probs, discount=0.9, init_dist=None, max_iter=10_000):
+    def diffuse(tones, center, action_probs, discount=[0.9]*6, init_dist=None, max_iter=10_000):
         n = len(tones)
         # initialize init_dist if not provided or convert to numpy array
         if init_dist is None:
@@ -110,7 +110,7 @@ class Tone:
                     -4    # major third down
                 ]):
                     if to_idx - from_idx == step:
-                        transition_matrices[mat_idx][from_idx, to_idx] = discount
+                        transition_matrices[mat_idx][from_idx, to_idx] = discount[mat_idx]
 
         # diffuse
         current_dist = init_dist.copy()
@@ -149,20 +149,27 @@ if __name__ == "__main__":
     lof = Tone.get_lof('Fbb', 'B##')
     tones = [Tone((idx, 0), name) for idx, name in enumerate(lof)]
 
-    path = 'data/Satie_-_Gnossiennes_1.csv'
-    # path = 'data/BWV_772.csv'
+    ### Example pieces
+    # path = 'data/Satie_-_Gnossiennes_1.csv'
+    # path = 'data/BWV_846.csv'
     # path = 'data/Salve-Regina_Lasso.csv'
-    # path = 'data/Schubert_90_2.csv'
+    path = 'data/Schubert_90_2.csv'
     # path = 'data/Ravel_-_Miroirs_I.csv'
     # path = 'data/Gesualdo_OVos.csv'
+    # path = 'data/machaut_detoutes.csv'
+    # path = 'data/Brahms_116_1.csv'
+    # path = 'data/Chopin_Opus_28_4.csv'
+    # path = 'data/Wanderer_Fantasy.csv'
+    # path = 'data/Webern_Variationen_1.csv'
 
     piece = pd.read_csv(path)
+    piece['tpc'] = piece['tpc'].str.replace('x', '##')
     counts = piece.tpc.value_counts(normalize=True).reindex(lof).fillna(0).values
     center = piece.tpc.value_counts().idxmax()
 
     ### INFERENCE
     # Constraint 1: probs must be between 0 and 1
-    bnds = ((0, 1),) * 7 # 6 step directions plus discount
+    bnds = ((0, 1),) * 12 # 6 step directions plus discount
 
     # Constraint 2: sum must be 1
     def con(a):
@@ -171,23 +178,24 @@ if __name__ == "__main__":
     cons = {'type':'eq', 'fun': con}
 
     def cost_f(x, args):
-        weights = Tone.diffuse(tones=tones, center=center, action_probs=x[:-1], discount=x[-1])
+        weights = Tone.diffuse(tones=tones, center=center, action_probs=x[:-6], discount=x[-6:])
         weights /= weights.sum()
 
         return Tone.jsd(weights, args)
 
-    mini = minimize(fun=cost_f, x0=[1/6]*6+[.99], args=(counts), method="SLSQP", bounds=bnds, constraints=cons)
+    mini = minimize(fun=cost_f, x0=[1/6]*6+[.5]*6, args=(counts), method="SLSQP", bounds=bnds, constraints=cons)
     best_params = mini.get('x')
-    best_weights = Tone.diffuse(tones=tones, center=center, action_probs=best_params[:-1], discount=best_params[-1])
+    best_weights = Tone.diffuse(tones=tones, center=center, action_probs=best_params[:-6], discount=best_params[-6:])
     best_weights /= best_weights.sum()
 
     ### PLOT
 
     # plot optimal parameters
-    x = np.arange(best_params[:-1].shape[0])
-    plt.bar(x, best_params[:-1])
-    plt.xticks(x, ['+P5', '-P5', '+m3', '-m3', '+M3', '-M3'])
-    plt.title(f'Discount: {round(best_params[-1],4)}')
+    x = np.arange(best_params[:-6].shape[0])
+    plt.bar(x, best_params[:-6])
+    ds = [round(p,3) for p in best_params[-6:]]
+    plt.xticks(x, [f'+P5\n{ds[0]}', f'-P5\n{ds[1]}', f'+m3\n{ds[2]}', f'-m3\n{ds[3]}', f'+M3\n{ds[4]}', f'-M3\n{ds[5]}'])
+    # plt.title(f'Discounts: {}')
     plt.show()
 
     # plot both distributions
