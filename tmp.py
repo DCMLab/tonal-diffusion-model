@@ -48,7 +48,7 @@ class Tone:
             init_dist = np.zeros(n)
             for idx, t in enumerate(tones):
                 if t.name == 'C' or t.name == 'G':
-                    init_dist[idx] = 0.5
+                    init_dist[idx] = 1# 0.5
         else:
             init_dist = np.array(init_dist)
         if not np.isclose(np.sum(init_dist), 1):
@@ -65,8 +65,8 @@ class Tone:
                     -1,  # fifth down
                     -3,  # minor third up
                     3,   # minor third down
-                    -4,  # major third up
-                    4    # major third down
+                    4,  # major third up
+                    -4    # major third down
                 ]):
                     if to_idx - from_idx == step:
                         transition_matrices[mat_idx][from_idx, to_idx] = discount
@@ -103,5 +103,5 @@ if __name__ == "__main__":
         'F#', 'C#', 'G#', 'D#', 'A#', 'E#', 'B#',
         'F##', 'C##', 'G##', 'D##', 'A##', 'E##', 'B##',
     ])]
-    weights = Tone.diffuse(tones=tones, action_probs=[1, 0.2, 0, 0, 0.2, 0.2], discount=0.5)
+    weights = Tone.diffuse(tones=tones, action_probs=[1, 0, 0, 0, 2, 0], discount=.5)
     Tone.plot(tones, weights=weights)
