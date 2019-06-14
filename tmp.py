@@ -56,10 +56,10 @@ class Tone:
 
         fig, ax = plt.subplots(1, 1, figsize=(15, 10))
         center_x, center_y = [t.loc for t in tones if t.name == center][0]
-        x_min = center_x - 5
-        x_max = center_x + 5
-        y_min = center_y - 5
-        y_max = center_y + 5
+        x_min = center_x - 3
+        x_max = center_x + 3
+        y_min = center_y - 3
+        y_max = center_y + 3
         for t, w in zip(tones, weights):
             for eq_idx in range(-3, 4):
                 loc = t.get_loc(eq_idx)
@@ -151,8 +151,8 @@ if __name__ == "__main__":
 
     # path = 'data/Satie_-_Gnossiennes_1.csv'
     # path = 'data/BWV_772.csv'
-    # path = 'data/Salve-Regina_Lasso.csv'
-    path = 'data/Schubert_90_2.csv'
+    path = 'data/Salve-Regina_Lasso.csv'
+    # path = 'data/Schubert_90_2.csv'
     # path = 'data/Ravel_-_Miroirs_I.csv'
     # path = 'data/Gesualdo_OVos.csv'
 
@@ -189,15 +189,15 @@ if __name__ == "__main__":
     # plt.show()
 
     # plot actual distribution
-    # fig = tonnetz(
-    #     piece,
-    #     colorbar=False,
-    #     figsize=(12,12),
-    #     cmap='Reds',
-    #     nan_color='white',
-    #     edgecolor='black'
-    # )
-    # fig.savefig('img/piece_dist.png')
+    fig = tonnetz(
+        piece,
+        colorbar=False,
+        figsize=(12,12),
+        cmap='Reds',
+        # nan_color='white',
+        edgecolor='black'
+    )
+    fig.savefig('img/piece_dist.png')
 
     # plot inferred distribution
     Tone.plot(tones, center, weights=best_weights)
