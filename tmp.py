@@ -2,6 +2,35 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 
+### Functions to generate arbitrary line-of-fifths (lof) segment
+steps = {s:idx for s, idx in zip(list('FCGDAEB'), range(7))}
+
+def get_lof_no(tpc):
+    """Returns tpc from lof number"""
+    step = steps[tpc[0]]
+    accs = tpc[1:].count('#') - tpc[1:].count('b')
+
+    return step + 7 * accs
+
+def get_tpc(lof_no):
+    """Returns tpc for lof number"""
+    a, b = divmod(lof_no, 7)
+    d = {v:k for k, v in steps.items()}
+    tpc = d[b]
+    if a < 0:
+        tpc += abs(a) * 'b'
+    if a > 0:
+        tpc += abs(a) * '#'
+    return tpc
+
+def get_lof(min_tpc, max_tpc):
+    """Returns number range on from tpcs"""
+    min = get_lof_no(min_tpc)
+    max = get_lof_no(max_tpc)
+
+    if max < min:
+        raise UserWarning(f"{min_tpc} is not lower than {max_tpc}.")
+    return [get_tpc(l) for l in np.arange(min, max + 1)]
 
 class Tone:
 
@@ -47,8 +76,8 @@ class Tone:
         if init_dist is None:
             init_dist = np.zeros(n)
             for idx, t in enumerate(tones):
-                if t.name == 'C' or t.name == 'G':
-                    init_dist[idx] = 1# 0.5
+                if t.name == 'C':# or t.name == 'G':
+                    init_dist[idx] = 1 #0.5
         else:
             init_dist = np.array(init_dist)
         if not np.isclose(np.sum(init_dist), 1):
@@ -70,6 +99,7 @@ class Tone:
                 ]):
                     if to_idx - from_idx == step:
                         transition_matrices[mat_idx][from_idx, to_idx] = discount
+
         # diffuse
         current_dist = init_dist.copy()
         next_dist = np.zeros_like(current_dist)
@@ -94,14 +124,9 @@ class Tone:
         x, y = self.loc + Tone.eq * eq_idx
         return x * Tone.e_x + y * Tone.e_y
 
-
 if __name__ == "__main__":
-    tones = [Tone((idx, 0), name) for idx, name in enumerate([
-        'Fbb', 'Cbb', 'Gbb', 'Dbb', 'Abb', 'Ebb', 'Bbb',
-        'Fb', 'Cb', 'Gb', 'Db', 'Ab', 'Eb', 'Bb',
-        'F', 'C', 'G', 'D', 'A', 'E', 'B',
-        'F#', 'C#', 'G#', 'D#', 'A#', 'E#', 'B#',
-        'F##', 'C##', 'G##', 'D##', 'A##', 'E##', 'B##',
-    ])]
-    weights = Tone.diffuse(tones=tones, action_probs=[1, 0, 0, 0, 2, 0], discount=.5)
+    lof = get_lof('Fbb', 'B##')
+    tones = [Tone((idx, 0), name) for idx, name in enumerate(lof)]
+    weights = Tone.diffuse(tones=tones, action_probs=[1.5, .5, .3, 0, .3, 0], discount=.5)
     Tone.plot(tones, weights=weights)
+    print()
