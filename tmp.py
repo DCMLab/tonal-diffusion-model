@@ -153,7 +153,7 @@ class Tone:
     @staticmethod
     def piece_freqs(csv_path, by_duration=True):
         # read piece and rename double sharps
-        df = pd.read_csv(csv_path, index_col=0)
+        df = pd.read_csv(csv_path, index_col=0, engine='python')
         df['tpc'] = df['tpc'].str.replace('x', '##')
 
         ## normalize
@@ -196,7 +196,7 @@ if __name__ == "__main__":
     meta = pd.read_csv('../ExtendedTonality/metadata.csv', sep='\t', encoding='utf-8')
     meta = meta[meta.filename.notnull()]
     path = '..\\ExtendedTonality\\data\\DataFrames\\'
-    csvs = [f for f in glob.glob(path+"*.csv")][::100]
+    csvs = [f for f in glob.glob(path+"*.csv")]
     pieces = []
     composers = []
     years = []
@@ -219,7 +219,7 @@ if __name__ == "__main__":
         return Tone.jsd(weights, args)
 
     JSDs = []
-    best_ws = []
+    best_ps = []
     for piece in pieces:
         freqs, center = Tone.piece_freqs(piece, by_duration=True)
 
@@ -232,15 +232,12 @@ if __name__ == "__main__":
             constraints=cons
         )
         best_params = mini.get('x')
+
         best_weights = Tone.diffuse(tones=tones, center=center, action_probs=best_params[:-6], discount=best_params[-6:])
         best_weights /= best_weights.sum()
 
         JSDs.append(Tone.jsd(freqs, best_weights))
-        best_ws.append(best_weights.T)
-
-
-        # results = pd.DataFrame(list(zip(JSDs, *best_ws, pieces, composers)))
-        # results.to_csv('results.tsv', sep='\t', index=False)
+        best_ps.append(best_params)
 
         ### PLOT
         # # plot optimal parameters
@@ -277,6 +274,9 @@ if __name__ == "__main__":
         #
         # # plot inferred distribution
         # Tone.plot(tones, center, weights=best_weights)
+
+    results = pd.DataFrame(list(zip(JSDs, *list(np.array(best_ps).T), pieces, composers, years)))
+    results.to_csv('results.tsv', sep='\t', index=False)
 
     fig, ax = plt.subplots(figsize=(18,15))
     # ax.scatter(np.arange(len(JSDs)), JSDs)
