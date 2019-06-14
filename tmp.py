@@ -148,52 +148,61 @@ class Tone:
         m = 1./2*(p + q)
         return entropy(p,m, base=base)/2. + entropy(q, m, base=base)/2.
 
+    @staticmethod
+    def piece_freqs(csv_path, by_duration=True):
+        # read piece and rename double sharps
+        df = pd.read_csv(pieces[1], index_col=0)
+        df['tpc'] = df['tpc'].str.replace('x', '##')
+
+        ## normalize
+        if by_duration:
+            # by duration
+            freqs = df.groupby('tpc')['duration'].sum()
+            freqs /= freqs.sum()
+        else:
+            # by counts
+            freqs = df.tpc.value_counts(normalize=True)
+
+        # sort on line of fifths and determine most frequent tpc
+        freqs = freqs.reindex(lof).fillna(0).values
+        center = df.tpc.value_counts().idxmax()
+        return freqs, center
+
+
 if __name__ == "__main__":
     lof = Tone.get_lof('Fbb', 'B##')
     tones = [Tone((idx, 0), name) for idx, name in enumerate(lof)]
 
     ### Example pieces
-    # path = 'data/Satie_-_Gnossiennes_1.csv'
-    # path = 'data/BWV_846.csv'
-    # path = 'data/Salve-Regina_Lasso.csv'
-    # path = 'data/Schubert_90_2.csv'
-    # path = 'data/Ravel_-_Miroirs_I.csv'
-    # path = 'data/Gesualdo_OVos.csv'
-    # path = 'data/machaut_detoutes.csv'
-    path = 'data/Brahms_116_1.csv'
-    # path = 'data/Chopin_Opus_28_4.csv'
-    # path = 'data/Wanderer_Fantasy.csv'
-    # path = 'data/Webern_Variationen_1.csv'
+    pieces = [
+        'data/machaut_detoutes.csv',
+        'data/Gesualdo_OVos.csv',
+        'data/Salve-Regina_Lasso.csv',
+        'data/BWV_846.csv',
+        'data/Schubert_90_2.csv',
+        'data/Wanderer_Fantasy.csv',
+        'data/Chopin_Opus_28_4.csv',
+        'data/Brahms_116_1.csv',
+        'data/Satie_-_Gnossiennes_1.csv',
+        'data/Ravel_-_Miroirs_I.csv',
+        'data/Webern_Variationen_1.csv'
+    ]
 
-    # read piece and rename double sharps
-    df = pd.read_csv(path, index_col=0)
-    df['tpc'] = df['tpc'].str.replace('x', '##')
-
-    ## normalize
-    # by duration
-    freqs = df.groupby('tpc')['duration'].sum()
-    freqs /= freqs.sum()
-    # by counts
-    freqs = df.tpc.value_counts(normalize=True)
-
-    # sort on line of fifths and determine most frequent tpc
-    freqs = freqs.reindex(lof).fillna(0).values
-    center = df.tpc.value_counts().idxmax()
+    piece = pieces[0]
+    
+    freqs, center = Tone.piece_freqs(piece, by_duration=True)
 
     ### INFERENCE
     # Constraint 1: weights and discounts must be between 0 and 1
     bnds = ((0, 1),) * 6 * 2 # 6 step directions plus discount
-
     # Constraint 2: sum of weights must be 1
     def con(a):
         return sum(a[:6]) - 1
-
     cons = {'type':'eq', 'fun': con}
 
     def cost_f(x, args):
         weights = Tone.diffuse(tones=tones, center=center, action_probs=x[:-6], discount=x[-6:])
         weights /= weights.sum()
-
         return Tone.jsd(weights, args)
 
     mini = minimize(
@@ -208,37 +217,37 @@ if __name__ == "__main__":
     best_weights = Tone.diffuse(tones=tones, center=center, action_probs=best_params[:-6], discount=best_params[-6:])
     best_weights /= best_weights.sum()
 
-    ### PLOT
-
-    # plot optimal parameters
-    x = np.arange(best_params[:-6].shape[0])
-    plt.bar(x, best_params[:-6])
-    ds = [round(p,3) for p in best_params[-6:]]
-    plt.xticks(x, [f'+P5\n{ds[0]}', f'-P5\n{ds[1]}', f'+m3\n{ds[2]}', f'-m3\n{ds[3]}', f'+M3\n{ds[4]}', f'-M3\n{ds[5]}'])
-    plt.show()
-
-    # plot both distributions
-    pd.DataFrame(
-        {'original':freqs, 'estimate':best_weights}
-        ).plot(
-            kind='bar',
-            figsize=(12,6)
-        )
-    plt.title(f"JSD: {round(Tone.jsd(freqs, best_weights), 3)}")
-    plt.xticks(np.arange(len(lof)),lof)
-    plt.tight_layout()
-    plt.show()
-
-    # plot actual distribution
-    fig = tonnetz(
-        df,
-        colorbar=False,
-        figsize=(12,12),
-        cmap='Reds',
-        # nan_color='white',
-        edgecolor='black'
-    )
-    fig.savefig('img/piece_dist.png')
-
-    # plot inferred distribution
-    Tone.plot(tones, center, weights=best_weights)
+    # ### PLOT
+    #
+    # # plot optimal parameters
+    # x = np.arange(best_params[:-6].shape[0])
+    # plt.bar(x, best_params[:-6])
+    # ds = [round(p,3) for p in best_params[-6:]]
+    # plt.xticks(x, [f'+P5\n{ds[0]}', f'-P5\n{ds[1]}', f'+m3\n{ds[2]}', f'-m3\n{ds[3]}', f'+M3\n{ds[4]}', f'-M3\n{ds[5]}'])
+    # plt.show()
+    #
+    # # plot both distributions
+    # pd.DataFrame(
+    #     {'original':freqs, 'estimate':best_weights}
+    #     ).plot(
+    #         kind='bar',
+    #         figsize=(12,6)
+    #     )
+    # plt.title(f"JSD: {round(Tone.jsd(freqs, best_weights), 3)}")
+    # plt.xticks(np.arange(len(lof)),lof)
+    # plt.tight_layout()
+    # plt.show()
+    #
+    # # plot actual distribution
+    # fig = tonnetz(
+    #     pd.read_csv(piece),
+    #     colorbar=False,
+    #     figsize=(12,12),
+    #     cmap='Reds',
+    #     # nan_color='white',
+    #     edgecolor='black'
+    # )
+    # fig.savefig('img/piece_dist.png')
+    #
+    # # plot inferred distribution
+    # Tone.plot(tones, center, weights=best_weights)
