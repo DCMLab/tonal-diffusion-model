@@ -127,6 +127,5 @@ class Tone:
 if __name__ == "__main__":
     lof = get_lof('Fbb', 'B##')
     tones = [Tone((idx, 0), name) for idx, name in enumerate(lof)]
-    weights = Tone.diffuse(tones=tones, action_probs=[1.5, .5, .3, 0, .3, 0], discount=.5)
+    weights = Tone.diffuse(tones=tones, action_probs=[5, 1, 1, 3, 3, 1], discount=.5)
     Tone.plot(tones, weights=weights)
-    print()
