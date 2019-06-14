@@ -80,8 +80,18 @@ class Tone:
         plt.show()
 
     ### Diffusion
+
+    intervals = [
+        1,   # fifth up
+        -1,  # fifth down
+        -3,  # minor third up
+        3,   # minor third down
+        4,  # major third up
+        -4    # major third down
+    ]
+
     @staticmethod
-    def diffuse(tones, center, action_probs, discount=[0.9]*6, init_dist=None, max_iter=10_000):
+    def diffuse(tones, center, action_probs, discount=[0.5]*6, init_dist=None, max_iter=1000):
         n = len(tones)
         # initialize init_dist if not provided or convert to numpy array
         if init_dist is None:
@@ -101,14 +111,7 @@ class Tone:
         transition_matrices = [np.zeros((n, n)) for _ in action_probs]
         for from_idx in range(n):
             for to_idx in range(n):
-                for mat_idx, step in enumerate([
-                    1,   # fifth up
-                    -1,  # fifth down
-                    -3,  # minor third up
-                    3,   # minor third down
-                    4,  # major third up
-                    -4    # major third down
-                ]):
+                for mat_idx, step in enumerate(Tone.intervals):
                     if to_idx - from_idx == step:
                         transition_matrices[mat_idx][from_idx, to_idx] = discount[mat_idx]
 
@@ -153,25 +156,35 @@ if __name__ == "__main__":
     # path = 'data/Satie_-_Gnossiennes_1.csv'
     # path = 'data/BWV_846.csv'
     # path = 'data/Salve-Regina_Lasso.csv'
-    path = 'data/Schubert_90_2.csv'
+    # path = 'data/Schubert_90_2.csv'
     # path = 'data/Ravel_-_Miroirs_I.csv'
     # path = 'data/Gesualdo_OVos.csv'
     # path = 'data/machaut_detoutes.csv'
-    # path = 'data/Brahms_116_1.csv'
+    path = 'data/Brahms_116_1.csv'
     # path = 'data/Chopin_Opus_28_4.csv'
     # path = 'data/Wanderer_Fantasy.csv'
     # path = 'data/Webern_Variationen_1.csv'
 
-    piece = pd.read_csv(path)
-    piece['tpc'] = piece['tpc'].str.replace('x', '##')
-    counts = piece.tpc.value_counts(normalize=True).reindex(lof).fillna(0).values
-    center = piece.tpc.value_counts().idxmax()
+    # read piece and rename double sharps
+    df = pd.read_csv(path, index_col=0)
+    df['tpc'] = df['tpc'].str.replace('x', '##')
+
+    ## normalize
+    # by duration
+    freqs = df.groupby('tpc')['duration'].sum()
+    freqs /= freqs.sum()
+    # by counts
+    freqs = df.tpc.value_counts(normalize=True)
+
+    # sort on line of fifths and determine most frequent tpc
+    freqs = freqs.reindex(lof).fillna(0).values
+    center = df.tpc.value_counts().idxmax()
 
     ### INFERENCE
-    # Constraint 1: probs must be between 0 and 1
-    bnds = ((0, 1),) * 12 # 6 step directions plus discount
+    # Constraint 1: weights and discounts must be between 0 and 1
+    bnds = ((0, 1),) * 6 * 2 # 6 step directions plus discount
 
-    # Constraint 2: sum must be 1
+    # Constraint 2: sum of weights must be 1
     def con(a):
         return sum(a[:6]) - 1
 
@@ -183,7 +196,14 @@ if __name__ == "__main__":
 
         return Tone.jsd(weights, args)
 
-    mini = minimize(fun=cost_f, x0=[1/6]*6+[.5]*6, args=(counts), method="SLSQP", bounds=bnds, constraints=cons)
+    mini = minimize(
+        fun=cost_f,
+        x0=[1/6] * 6 * 2,
+        args=(freqs),
+        method="SLSQP", # Sequential Least SQares Programming
+        bounds=bnds,
+        constraints=cons
+    )
     best_params = mini.get('x')
     best_weights = Tone.diffuse(tones=tones, center=center, action_probs=best_params[:-6], discount=best_params[-6:])
     best_weights /= best_weights.sum()
@@ -195,24 +215,23 @@ if __name__ == "__main__":
     plt.bar(x, best_params[:-6])
     ds = [round(p,3) for p in best_params[-6:]]
     plt.xticks(x, [f'+P5\n{ds[0]}', f'-P5\n{ds[1]}', f'+m3\n{ds[2]}', f'-m3\n{ds[3]}', f'+M3\n{ds[4]}', f'-M3\n{ds[5]}'])
-    # plt.title(f'Discounts: {}')
     plt.show()
 
     # plot both distributions
     pd.DataFrame(
-        {'original':counts, 'estimate':best_weights}
+        {'original':freqs, 'estimate':best_weights}
         ).plot(
             kind='bar',
             figsize=(12,6)
         )
-    plt.title(f"JSD: {round(Tone.jsd(counts, best_weights), 3)}")
+    plt.title(f"JSD: {round(Tone.jsd(freqs, best_weights), 3)}")
     plt.xticks(np.arange(len(lof)),lof)
     plt.tight_layout()
     plt.show()
 
     # plot actual distribution
     fig = tonnetz(
-        piece,
+        df,
         colorbar=False,
         figsize=(12,12),
         cmap='Reds',
