@@ -2,38 +2,42 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 
-### Functions to generate arbitrary line-of-fifths (lof) segment
-steps = {s:idx for s, idx in zip(list('FCGDAEB'), range(7))}
-
-def get_lof_no(tpc):
-    """Returns tpc from lof number"""
-    step = steps[tpc[0]]
-    accs = tpc[1:].count('#') - tpc[1:].count('b')
-
-    return step + 7 * accs
-
-def get_tpc(lof_no):
-    """Returns tpc for lof number"""
-    a, b = divmod(lof_no, 7)
-    d = {v:k for k, v in steps.items()}
-    tpc = d[b]
-    if a < 0:
-        tpc += abs(a) * 'b'
-    if a > 0:
-        tpc += abs(a) * '#'
-    return tpc
-
-def get_lof(min_tpc, max_tpc):
-    """Returns number range on from tpcs"""
-    min = get_lof_no(min_tpc)
-    max = get_lof_no(max_tpc)
-
-    if max < min:
-        raise UserWarning(f"{min_tpc} is not lower than {max_tpc}.")
-    return [get_tpc(l) for l in np.arange(min, max + 1)]
-
 class Tone:
 
+    ### Functions to generate arbitrary line-of-fifths (lof) segment
+    steps = {s:idx for s, idx in zip(list('FCGDAEB'), range(7))}
+
+    @staticmethod
+    def get_lof_no(tpc):
+        """Returns tpc from lof number"""
+        step = Tone.steps[tpc[0]]
+        accs = tpc[1:].count('#') - tpc[1:].count('b')
+
+        return step + 7 * accs
+
+    @staticmethod
+    def get_tpc(lof_no):
+        """Returns tpc for lof number"""
+        a, b = divmod(lof_no, 7)
+        d = {v:k for k, v in Tone.steps.items()}
+        tpc = d[b]
+        if a < 0:
+            tpc += abs(a) * 'b'
+        if a > 0:
+            tpc += abs(a) * '#'
+        return tpc
+
+    @staticmethod
+    def get_lof(min_tpc, max_tpc):
+        """Returns number range on from tpcs"""
+        min = Tone.get_lof_no(min_tpc)
+        max = Tone.get_lof_no(max_tpc)
+
+        if max < min:
+            raise UserWarning(f"{min_tpc} is not lower than {max_tpc}.")
+        return [ Tone.get_tpc(l) for l in np.arange(min, max + 1) ]
+
+    ### Tonnetz plotting
     e_x = np.array([1, 0])
     e_y = np.array([np.cos(np.pi / 3), -np.sin(np.pi / 3)])
     eq = np.array([3, 1])
@@ -69,6 +73,7 @@ class Tone:
         plt.axis('off')
         plt.show()
 
+    ### Diffusion
     @staticmethod
     def diffuse(tones, action_probs, discount=0.9, init_dist=None, max_iter=1000):
         n = len(tones)
@@ -125,7 +130,7 @@ class Tone:
         return x * Tone.e_x + y * Tone.e_y
 
 if __name__ == "__main__":
-    lof = get_lof('Fbb', 'B##')
+    lof = Tone.get_lof('Fbb', 'B##')
     tones = [Tone((idx, 0), name) for idx, name in enumerate(lof)]
     weights = Tone.diffuse(tones=tones, action_probs=[5, 1, 1, 3, 3, 1], discount=.5)
     Tone.plot(tones, weights=weights)
