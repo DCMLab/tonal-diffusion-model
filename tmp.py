@@ -149,9 +149,9 @@ if __name__ == "__main__":
     lof = Tone.get_lof('Fbb', 'B##')
     tones = [Tone((idx, 0), name) for idx, name in enumerate(lof)]
 
-    # path = 'data/Satie_-_Gnossiennes_1.csv'
+    path = 'data/Satie_-_Gnossiennes_1.csv'
     # path = 'data/BWV_772.csv'
-    path = 'data/Salve-Regina_Lasso.csv'
+    # path = 'data/Salve-Regina_Lasso.csv'
     # path = 'data/Schubert_90_2.csv'
     # path = 'data/Ravel_-_Miroirs_I.csv'
     # path = 'data/Gesualdo_OVos.csv'
@@ -179,14 +179,28 @@ if __name__ == "__main__":
     mini = minimize(fun=cost_f, x0=[1/6]*6+[.99], args=(counts), method="SLSQP", bounds=bnds, constraints=cons)
     best_params = mini.get('x')
     best_weights = Tone.diffuse(tones=tones, center=center, action_probs=best_params[:-1], discount=best_params[-1])
+    best_weights /= best_weights.sum()
 
     ### PLOT
+
     # plot optimal parameters
-    # x = np.arange(best_params[:-1].shape[0])
-    # plt.bar(x, best_params[:-1])
-    # plt.xticks(x, ['+P5', '-P5', '+m3', '-m3', '+M3', '-M3'])
-    # plt.title(f'Discount: {round(best_params[-1],4)}')
-    # plt.show()
+    x = np.arange(best_params[:-1].shape[0])
+    plt.bar(x, best_params[:-1])
+    plt.xticks(x, ['+P5', '-P5', '+m3', '-m3', '+M3', '-M3'])
+    plt.title(f'Discount: {round(best_params[-1],4)}')
+    plt.show()
+
+    # plot both distributions
+    pd.DataFrame(
+        {'original':counts, 'estimate':best_weights}
+        ).plot(
+            kind='bar',
+            figsize=(12,6)
+        )
+    plt.title(f"JSD: {round(Tone.jsd(counts, best_weights), 3)}")
+    plt.xticks(np.arange(len(lof)),lof)
+    plt.tight_layout()
+    plt.show()
 
     # plot actual distribution
     fig = tonnetz(
