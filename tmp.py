@@ -1,5 +1,7 @@
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+from pitchplots.static import tonnetz
+
 import numpy as np
 from scipy.optimize import minimize
 from scipy.stats import entropy
@@ -139,7 +141,12 @@ if __name__ == "__main__":
     tones = [Tone((idx, 0), name) for idx, name in enumerate(lof)]
 
     # path = 'data/Satie_-_Gnossiennes_1.csv'
-    path = 'data/BWV_772.csv'
+    # path = 'data/BWV_772.csv'
+    # path = 'data/Salve-Regina_Lasso.csv'
+    # path = 'data/Schubert_90_2.csv'
+    # path = 'data/Ravel_-_Miroirs_I.csv'
+    # path = 'data/Gesualdo_OVos.csv'
+
     piece = pd.read_csv(path)
     counts = piece.tpc.value_counts(normalize=True).reindex(lof).fillna(0).values
     center = piece.tpc.value_counts().idxmax()
@@ -163,7 +170,7 @@ if __name__ == "__main__":
         return entropy(p,m, base=base)/2. + entropy(q, m, base=base)/2.
 
     def cost_f(x, args):
-        weights = Tone.diffuse(tones=tones, center=center, action_probs=x, discount=.99)
+        weights = Tone.diffuse(tones=tones, center=center, action_probs=x[:-1], discount=x[-1])
         weights /= weights.sum()
 
         return jsd(weights, args)
@@ -171,6 +178,22 @@ if __name__ == "__main__":
     mini = minimize(fun=cost_f, x0=[1/6]*6+[.99], args=(counts), method="SLSQP", bounds=bnds, constraints=cons)
     best_params = mini.get('x')
     best_weights = Tone.diffuse(tones=tones, center=center, action_probs=best_params[:-1], discount=best_params[-1])
-    print(best_params)
+
     ### PLOT
+    x = np.arange(best_params[:-1].shape[0])
+    plt.bar(x, best_params[:-1])
+    plt.xticks(x, ['+P5', '-P5', '+m3', '-m3', '+M3', '-M3'])
+    plt.title(f'Discount: {round(best_params[-1],3)}')
+    plt.show()
+
+    fig = tonnetz(
+        piece,
+        colorbar=False,
+        figsize=(12,12),
+        cmap='Reds',
+        nan_color='white',
+        edgecolor='black'
+    )
+    fig.savefig('original.png')
+
     Tone.plot(tones, center, weights=best_weights)
