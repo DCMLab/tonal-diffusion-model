@@ -135,13 +135,21 @@ class Tone:
         x, y = self.loc + Tone.eq * eq_idx
         return x * Tone.e_x + y * Tone.e_y
 
+    @staticmethod
+    def jsd(p, q, base=2):
+        ## convert to np.array
+        p, q = np.asarray(p), np.asarray(q)
+        ## normalize p, q to probabilities
+        p, q = p/p.sum(), q/q.sum()
+        m = 1./2*(p + q)
+        return entropy(p,m, base=base)/2. + entropy(q, m, base=base)/2.
 
 if __name__ == "__main__":
     lof = Tone.get_lof('Fbb', 'B##')
     tones = [Tone((idx, 0), name) for idx, name in enumerate(lof)]
 
     # path = 'data/Satie_-_Gnossiennes_1.csv'
-    # path = 'data/BWV_772.csv'
+    path = 'data/BWV_772.csv'
     # path = 'data/Salve-Regina_Lasso.csv'
     # path = 'data/Schubert_90_2.csv'
     # path = 'data/Ravel_-_Miroirs_I.csv'
@@ -161,31 +169,25 @@ if __name__ == "__main__":
 
     cons = {'type':'eq', 'fun': con}
 
-    def jsd(p, q, base=2):
-        ## convert to np.array
-        p, q = np.asarray(p), np.asarray(q)
-        ## normalize p, q to probabilities
-        p, q = p/p.sum(), q/q.sum()
-        m = 1./2*(p + q)
-        return entropy(p,m, base=base)/2. + entropy(q, m, base=base)/2.
-
     def cost_f(x, args):
         weights = Tone.diffuse(tones=tones, center=center, action_probs=x[:-1], discount=x[-1])
         weights /= weights.sum()
 
-        return jsd(weights, args)
+        return Tone.jsd(weights, args)
 
     mini = minimize(fun=cost_f, x0=[1/6]*6+[.99], args=(counts), method="SLSQP", bounds=bnds, constraints=cons)
     best_params = mini.get('x')
     best_weights = Tone.diffuse(tones=tones, center=center, action_probs=best_params[:-1], discount=best_params[-1])
 
     ### PLOT
+    # plot optimal parameters
     x = np.arange(best_params[:-1].shape[0])
     plt.bar(x, best_params[:-1])
     plt.xticks(x, ['+P5', '-P5', '+m3', '-m3', '+M3', '-M3'])
-    plt.title(f'Discount: {round(best_params[-1],3)}')
+    plt.title(f'Discount: {round(best_params[-1],4)}')
     plt.show()
 
+    # plot actual distribution
     fig = tonnetz(
         piece,
         colorbar=False,
@@ -196,4 +198,5 @@ if __name__ == "__main__":
     )
     fig.savefig('original.png')
 
+    # plot inferred distribution
     Tone.plot(tones, center, weights=best_weights)
