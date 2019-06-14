@@ -196,7 +196,7 @@ if __name__ == "__main__":
         nan_color='white',
         edgecolor='black'
     )
-    fig.savefig('original.png')
+    fig.savefig('img/piece_dist.png')
 
     # plot inferred distribution
     Tone.plot(tones, center, weights=best_weights)
