@@ -7,6 +7,8 @@ from scipy.optimize import minimize
 from scipy.stats import entropy
 import pandas as pd
 
+import glob
+
 class Tone:
 
     ### Functions to generate arbitrary line-of-fifths (lof) segment
@@ -151,7 +153,7 @@ class Tone:
     @staticmethod
     def piece_freqs(csv_path, by_duration=True):
         # read piece and rename double sharps
-        df = pd.read_csv(pieces[1], index_col=0)
+        df = pd.read_csv(csv_path, index_col=0)
         df['tpc'] = df['tpc'].str.replace('x', '##')
 
         ## normalize
@@ -179,19 +181,30 @@ if __name__ == "__main__":
         'data/Gesualdo_OVos.csv',
         'data/Salve-Regina_Lasso.csv',
         'data/BWV_846.csv',
+        'data/sonata01-1.csv',
+        'data/Sonate_No._17_Tempest_1st_Movement.csv',
         'data/Schubert_90_2.csv',
         'data/Wanderer_Fantasy.csv',
         'data/Chopin_Opus_28_4.csv',
+        'data/Liszt_Lugubre_gondola_I_200_1.csv',
         'data/Brahms_116_1.csv',
         'data/Satie_-_Gnossiennes_1.csv',
         'data/Ravel_-_Miroirs_I.csv',
         'data/Webern_Variationen_1.csv'
     ]
 
-    piece = pieces[0]
-    
-    freqs, center = Tone.piece_freqs(piece, by_duration=True)
-
+    meta = pd.read_csv('../ExtendedTonality/metadata.csv', sep='\t', encoding='utf-8')
+    meta = meta[meta.filename.notnull()]
+    path = '..\\ExtendedTonality\\data\\DataFrames\\'
+    csvs = [f for f in glob.glob(path+"*.csv")][::100]
+    pieces = []
+    composers = []
+    years = []
+    for i, row in meta.iterrows():
+        if  (path + row.filename + '.csv' in csvs):
+            pieces.append(path + row.filename + '.csv')
+            composers.append(row.composer)
+            years.append(row.display_year)
     ### INFERENCE
     # Constraint 1: weights and discounts must be between 0 and 1
     bnds = ((0, 1),) * 6 * 2 # 6 step directions plus discount
@@ -205,49 +218,70 @@ if __name__ == "__main__":
         weights /= weights.sum()
         return Tone.jsd(weights, args)
 
-    mini = minimize(
-        fun=cost_f,
-        x0=[1/6] * 6 * 2,
-        args=(freqs),
-        method="SLSQP", # Sequential Least SQares Programming
-        bounds=bnds,
-        constraints=cons
-    )
-    best_params = mini.get('x')
-    best_weights = Tone.diffuse(tones=tones, center=center, action_probs=best_params[:-6], discount=best_params[-6:])
-    best_weights /= best_weights.sum()
+    JSDs = []
+    best_ws = []
+    for piece in pieces:
+        freqs, center = Tone.piece_freqs(piece, by_duration=True)
 
-    # ### PLOT
-    #
-    # # plot optimal parameters
-    # x = np.arange(best_params[:-6].shape[0])
-    # plt.bar(x, best_params[:-6])
-    # ds = [round(p,3) for p in best_params[-6:]]
-    # plt.xticks(x, [f'+P5\n{ds[0]}', f'-P5\n{ds[1]}', f'+m3\n{ds[2]}', f'-m3\n{ds[3]}', f'+M3\n{ds[4]}', f'-M3\n{ds[5]}'])
-    # plt.show()
-    #
-    # # plot both distributions
-    # pd.DataFrame(
-    #     {'original':freqs, 'estimate':best_weights}
-    #     ).plot(
-    #         kind='bar',
-    #         figsize=(12,6)
-    #     )
-    # plt.title(f"JSD: {round(Tone.jsd(freqs, best_weights), 3)}")
-    # plt.xticks(np.arange(len(lof)),lof)
-    # plt.tight_layout()
-    # plt.show()
-    #
-    # # plot actual distribution
-    # fig = tonnetz(
-    #     pd.read_csv(piece),
-    #     colorbar=False,
-    #     figsize=(12,12),
-    #     cmap='Reds',
-    #     # nan_color='white',
-    #     edgecolor='black'
-    # )
-    # fig.savefig('img/piece_dist.png')
-    #
-    # # plot inferred distribution
-    # Tone.plot(tones, center, weights=best_weights)
+        mini = minimize(
+            fun=cost_f,
+            x0=[1/6] * 6 * 2,
+            args=(freqs),
+            method="SLSQP", # Sequential Least SQares Programming
+            bounds=bnds,
+            constraints=cons
+        )
+        best_params = mini.get('x')
+        best_weights = Tone.diffuse(tones=tones, center=center, action_probs=best_params[:-6], discount=best_params[-6:])
+        best_weights /= best_weights.sum()
+
+        JSDs.append(Tone.jsd(freqs, best_weights))
+        best_ws.append(best_weights.T)
+
+
+        # results = pd.DataFrame(list(zip(JSDs, *best_ws, pieces, composers)))
+        # results.to_csv('results.tsv', sep='\t', index=False)
+
+        ### PLOT
+        # # plot optimal parameters
+        # x = np.arange(best_params[:-6].shape[0])
+        # plt.bar(x, best_params[:-6])
+        # ds = [round(p,3) for p in best_params[-6:]]
+        # plt.xticks(x, [f'+P5\n{ds[0]}', f'-P5\n{ds[1]}', f'+m3\n{ds[2]}', f'-m3\n{ds[3]}', f'+M3\n{ds[4]}', f'-M3\n{ds[5]}'])
+        # plt.show()
+        #
+        # # plot both distributions
+        # pd.DataFrame(
+        #     {'original':freqs, 'estimate':best_weights}
+        #     ).plot(
+        #         kind='bar',
+        #         figsize=(12,6)
+        #     )
+        # plt.title(f"JSD: {round(Tone.jsd(freqs, best_weights), 3)}")
+        # plt.xticks(np.arange(len(lof)),lof)
+        # plt.tight_layout()
+        # plt.show()
+        #
+        # # plot actual distribution
+        # df =pd.read_csv(piece)
+        # df['tpc'] = df['tpc'].str.replace('x', '##')
+        # fig = tonnetz(
+        #     df,
+        #     colorbar=False,
+        #     figsize=(12,12),
+        #     cmap='Reds',
+        #     # nan_color='white',
+        #     edgecolor='black',
+        #     show=True
+        # )
+        #
+        # # plot inferred distribution
+        # Tone.plot(tones, center, weights=best_weights)
+
+    fig, ax = plt.subplots(figsize=(18,15))
+    # ax.scatter(np.arange(len(JSDs)), JSDs)
+    # plt.xticks(np.arange(len(JSDs)), pieces, rotation=90)
+    ax.plot(JSDs)
+    plt.title("Jensen-Shannon Divergences")
+    plt.tight_layout()
+    plt.show()
