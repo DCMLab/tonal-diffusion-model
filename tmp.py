@@ -1,6 +1,9 @@
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy.optimize import minimize
+from scipy.stats import entropy
+import pandas as pd
 
 class Tone:
 
@@ -43,13 +46,13 @@ class Tone:
     eq = np.array([3, 1])
 
     @staticmethod
-    def plot(tones, weights, min_col=(1, 1, 1), max_col=(1, 0, 0)):
+    def plot(tones, center, weights, min_col=(1, 1, 1), max_col=(1, 0, 0)):
         weights = np.array(weights)
         weights /= np.max(weights)
         min_col = np.array(min_col)
         max_col = np.array(max_col)
         fig, ax = plt.subplots(1, 1, figsize=(15, 10))
-        center_x, center_y = [t.loc for t in tones if t.name == 'C'][0]
+        center_x, center_y = [t.loc for t in tones if t.name == center][0]
         x_min = center_x - 5
         x_max = center_x + 5
         y_min = center_y - 5
@@ -75,18 +78,19 @@ class Tone:
 
     ### Diffusion
     @staticmethod
-    def diffuse(tones, action_probs, discount=0.9, init_dist=None, max_iter=1000):
+    def diffuse(tones, center, action_probs, discount=0.9, init_dist=None, max_iter=10_000):
         n = len(tones)
         # initialize init_dist if not provided or convert to numpy array
         if init_dist is None:
             init_dist = np.zeros(n)
             for idx, t in enumerate(tones):
-                if t.name == 'C':# or t.name == 'G':
-                    init_dist[idx] = 1 #0.5
+                if t.name == center:
+                    init_dist[idx] = 1.
         else:
             init_dist = np.array(init_dist)
-        if not np.isclose(np.sum(init_dist), 1):
+        if not np.isclose(np.sum(init_dist), 1.):
             raise UserWarning(f"Init dist not normalized (sum={np.sum(init_dist)})")
+
         # normalize action_probs and convert to numpy array
         action_probs = np.array(action_probs)
         action_probs = action_probs / np.sum(action_probs)
@@ -129,8 +133,44 @@ class Tone:
         x, y = self.loc + Tone.eq * eq_idx
         return x * Tone.e_x + y * Tone.e_y
 
+
 if __name__ == "__main__":
     lof = Tone.get_lof('Fbb', 'B##')
     tones = [Tone((idx, 0), name) for idx, name in enumerate(lof)]
-    weights = Tone.diffuse(tones=tones, action_probs=[5, 1, 1, 3, 3, 1], discount=.5)
-    Tone.plot(tones, weights=weights)
+
+    # path = 'data/Satie_-_Gnossiennes_1.csv'
+    path = 'data/BWV_772.csv'
+    piece = pd.read_csv(path)
+    counts = piece.tpc.value_counts(normalize=True).reindex(lof).fillna(0).values
+    center = piece.tpc.value_counts().idxmax()
+
+    ### INFERENCE
+    # Constraint 1: probs must be between 0 and 1
+    bnds = ((0, 1),) * 7 # 6 step directions plus discount
+
+    # Constraint 2: sum must be 1
+    def con(a):
+        return sum(a[:6]) - 1
+
+    cons = {'type':'eq', 'fun': con}
+
+    def jsd(p, q, base=2):
+        ## convert to np.array
+        p, q = np.asarray(p), np.asarray(q)
+        ## normalize p, q to probabilities
+        p, q = p/p.sum(), q/q.sum()
+        m = 1./2*(p + q)
+        return entropy(p,m, base=base)/2. + entropy(q, m, base=base)/2.
+
+    def cost_f(x, args):
+        weights = Tone.diffuse(tones=tones, center=center, action_probs=x, discount=.99)
+        weights /= weights.sum()
+
+        return jsd(weights, args)
+
+    mini = minimize(fun=cost_f, x0=[1/6]*6+[.99], args=(counts), method="SLSQP", bounds=bnds, constraints=cons)
+    best_params = mini.get('x')
+    best_weights = Tone.diffuse(tones=tones, center=center, action_probs=best_params[:-1], discount=best_params[-1])
+    print(best_params)
+    ### PLOT
+    Tone.plot(tones, center, weights=best_weights)
