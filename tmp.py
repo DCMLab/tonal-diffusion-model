@@ -1,5 +1,6 @@
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+plt.style.use('ggplot')
 from pitchplots.static import tonnetz
 
 import numpy as np
@@ -13,6 +14,7 @@ class Tone:
 
     ### Functions to generate arbitrary line-of-fifths (lof) segment
     steps = {s:idx for s, idx in zip(list('FCGDAEB'), range(7))}
+    int_strings = ['+P5', '-P5', '+m3', '-m3', '+M3', '-M3']
 
     @staticmethod
     def get_lof_no(tpc):
@@ -176,7 +178,7 @@ if __name__ == "__main__":
     tones = [Tone((idx, 0), name) for idx, name in enumerate(lof)]
 
     ### Example pieces
-    pieces = [
+    ex_pieces = [
         'data/machaut_detoutes.csv',
         'data/Gesualdo_OVos.csv',
         'data/Salve-Regina_Lasso.csv',
@@ -205,6 +207,7 @@ if __name__ == "__main__":
             pieces.append(path + row.filename + '.csv')
             composers.append(row.composer)
             years.append(row.display_year)
+            
     ### INFERENCE
     # Constraint 1: weights and discounts must be between 0 and 1
     bnds = ((0, 1),) * 6 * 2 # 6 step directions plus discount
@@ -220,7 +223,7 @@ if __name__ == "__main__":
 
     JSDs = []
     best_ps = []
-    for piece in pieces:
+    for piece in ex_pieces[:3]:
         freqs, center = Tone.piece_freqs(piece, by_duration=True)
 
         mini = minimize(
@@ -240,48 +243,49 @@ if __name__ == "__main__":
         best_ps.append(best_params)
 
         ### PLOT
-        # # plot optimal parameters
-        # x = np.arange(best_params[:-6].shape[0])
-        # plt.bar(x, best_params[:-6])
-        # ds = [round(p,3) for p in best_params[-6:]]
-        # plt.xticks(x, [f'+P5\n{ds[0]}', f'-P5\n{ds[1]}', f'+m3\n{ds[2]}', f'-m3\n{ds[3]}', f'+M3\n{ds[4]}', f'-M3\n{ds[5]}'])
-        # plt.show()
-        #
-        # # plot both distributions
-        # pd.DataFrame(
-        #     {'original':freqs, 'estimate':best_weights}
-        #     ).plot(
-        #         kind='bar',
-        #         figsize=(12,6)
-        #     )
-        # plt.title(f"JSD: {round(Tone.jsd(freqs, best_weights), 3)}")
-        # plt.xticks(np.arange(len(lof)),lof)
-        # plt.tight_layout()
-        # plt.show()
-        #
-        # # plot actual distribution
-        # df =pd.read_csv(piece)
-        # df['tpc'] = df['tpc'].str.replace('x', '##')
-        # fig = tonnetz(
-        #     df,
-        #     colorbar=False,
-        #     figsize=(12,12),
-        #     cmap='Reds',
-        #     # nan_color='white',
-        #     edgecolor='black',
-        #     show=True
-        # )
-        #
-        # # plot inferred distribution
-        # Tone.plot(tones, center, weights=best_weights)
+        # plot optimal parameters
+        x = np.arange(best_params[:-6].shape[0])
+        plt.bar(x, best_params[:-6])
+        ds = [round(p,3) for p in best_params[-6:]]
 
-    results = pd.DataFrame(list(zip(JSDs, *list(np.array(best_ps).T), pieces, composers, years)))
-    results.to_csv('results.tsv', sep='\t', index=False)
+        plt.xticks(x, [f'{i}\n{ds[j]}'  for i, j in zip(Tone.int_strings, range(6))])
+        plt.show()
 
-    fig, ax = plt.subplots(figsize=(18,15))
-    # ax.scatter(np.arange(len(JSDs)), JSDs)
-    # plt.xticks(np.arange(len(JSDs)), pieces, rotation=90)
-    ax.plot(JSDs)
-    plt.title("Jensen-Shannon Divergences")
-    plt.tight_layout()
-    plt.show()
+        # plot both distributions
+        pd.DataFrame(
+            {'original':freqs, 'estimate':best_weights}
+            ).plot(
+                kind='bar',
+                figsize=(12,6)
+            )
+        plt.title(f"JSD: {round(Tone.jsd(freqs, best_weights), 3)}")
+        plt.xticks(np.arange(len(lof)),lof)
+        plt.tight_layout()
+        plt.show()
+        #
+        # plot actual distribution
+        df =pd.read_csv(piece)
+        df['tpc'] = df['tpc'].str.replace('x', '##')
+        fig = tonnetz(
+            df,
+            colorbar=False,
+            figsize=(12,12),
+            cmap='Reds',
+            # nan_color='white',
+            edgecolor='black',
+            show=True
+        )
+
+        # plot inferred distribution
+        Tone.plot(tones, center, weights=best_weights)
+
+    # results = pd.DataFrame(list(zip(JSDs, *list(np.array(best_ps).T), pieces, composers, years)))
+    # results.to_csv('results.tsv', sep='\t', index=False)
+
+    # fig, ax = plt.subplots(figsize=(18,15))
+    # # ax.scatter(np.arange(len(JSDs)), JSDs)
+    # # plt.xticks(np.arange(len(JSDs)), pieces, rotation=90)
+    # ax.plot(JSDs)
+    # plt.title("Jensen-Shannon Divergences")
+    # plt.tight_layout()
+    # plt.show()
