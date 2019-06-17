@@ -207,7 +207,7 @@ if __name__ == "__main__":
             pieces.append(path + row.filename + '.csv')
             composers.append(row.composer)
             years.append(row.display_year)
-            
+
     ### INFERENCE
     # Constraint 1: weights and discounts must be between 0 and 1
     bnds = ((0, 1),) * 6 * 2 # 6 step directions plus discount
@@ -223,7 +223,7 @@ if __name__ == "__main__":
 
     JSDs = []
     best_ps = []
-    for piece in ex_pieces[:3]:
+    for piece in ex_pieces:
         freqs, center = Tone.piece_freqs(piece, by_duration=True)
 
         mini = minimize(
@@ -247,8 +247,8 @@ if __name__ == "__main__":
         x = np.arange(best_params[:-6].shape[0])
         plt.bar(x, best_params[:-6])
         ds = [round(p,3) for p in best_params[-6:]]
-
         plt.xticks(x, [f'{i}\n{ds[j]}'  for i, j in zip(Tone.int_strings, range(6))])
+        plt.title(piece)
         plt.show()
 
         # plot both distributions
@@ -258,11 +258,12 @@ if __name__ == "__main__":
                 kind='bar',
                 figsize=(12,6)
             )
-        plt.title(f"JSD: {round(Tone.jsd(freqs, best_weights), 3)}")
+        plt.title(f"JSD: {round(Tone.jsd(freqs, best_weights), 3)}\n{piece}")
         plt.xticks(np.arange(len(lof)),lof)
         plt.tight_layout()
         plt.show()
-        #
+
+
         # plot actual distribution
         df =pd.read_csv(piece)
         df['tpc'] = df['tpc'].str.replace('x', '##')
