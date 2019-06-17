@@ -179,20 +179,22 @@ if __name__ == "__main__":
 
     ### Example pieces
     ex_pieces = [
-        'data/machaut_detoutes.csv',
-        'data/Gesualdo_OVos.csv',
-        'data/Salve-Regina_Lasso.csv',
-        'data/BWV_846.csv',
-        'data/sonata01-1.csv',
-        'data/Sonate_No._17_Tempest_1st_Movement.csv',
-        'data/Schubert_90_2.csv',
-        'data/Wanderer_Fantasy.csv',
-        'data/Chopin_Opus_28_4.csv',
-        'data/Liszt_Lugubre_gondola_I_200_1.csv',
-        'data/Brahms_116_1.csv',
-        'data/Satie_-_Gnossiennes_1.csv',
-        'data/Ravel_-_Miroirs_I.csv',
-        'data/Webern_Variationen_1.csv'
+        # 'data/machaut_detoutes.csv',
+        # 'data/Gesualdo_OVos.csv',
+        # 'data/Salve-Regina_Lasso.csv',
+        # 'data/BWV_846.csv',
+        # 'data/sonata01-1.csv',
+        # 'data/Sonate_No._17_Tempest_1st_Movement.csv',
+        # 'data/Schubert_90_2.csv',
+        # 'data/Wanderer_Fantasy.csv',
+        # 'data/Chopin_Opus_28_4.csv',
+        'data/Reichardt_Louise_-_Zwolf_Gesange_No.1_-_Erinnrung_am_Bach.mxl.csv', # worst
+        # 'data/Liszt_Lugubre_gondola_I_200_1.csv',
+        'data/Scherzo_Focoso_Opus_34_in_B_Minor.mxl.csv', # best
+        # 'data/Brahms_116_1.csv',
+        # 'data/Satie_-_Gnossiennes_1.csv',
+        # 'data/Ravel_-_Miroirs_I.csv',
+        # 'data/Webern_Variationen_1.csv'
     ]
 
     meta = pd.read_csv('../ExtendedTonality/metadata.csv', sep='\t', encoding='utf-8')
