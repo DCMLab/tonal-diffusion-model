@@ -9,6 +9,7 @@ from scipy.stats import entropy
 import pandas as pd
 
 import glob
+from tqdm import tqdm
 
 class Tone:
 
@@ -168,9 +169,9 @@ class Tone:
             freqs = df.tpc.value_counts(normalize=True)
 
         # sort on line of fifths and determine most frequent tpc
-        freqs = freqs.reindex(lof).fillna(0).values
-        center = df.tpc.value_counts().idxmax()
-        return freqs, center
+        freqs = freqs.reindex(lof).fillna(0)
+        center = freqs.idxmax()
+        return freqs.values, center
 
 
 if __name__ == "__main__":
@@ -220,12 +221,12 @@ if __name__ == "__main__":
 
     def cost_f(x, args):
         weights = Tone.diffuse(tones=tones, center=center, action_probs=x[:-6], discount=x[-6:])
-        weights /= weights.sum()
+        weights /= weights.sum() ## ???
         return Tone.jsd(weights, args)
 
     JSDs = []
     best_ps = []
-    for piece in ex_pieces:
+    for piece in tqdm(pieces): # ex_pieces
         freqs, center = Tone.piece_freqs(piece, by_duration=True)
 
         mini = minimize(
@@ -239,55 +240,55 @@ if __name__ == "__main__":
         best_params = mini.get('x')
 
         best_weights = Tone.diffuse(tones=tones, center=center, action_probs=best_params[:-6], discount=best_params[-6:])
-        best_weights /= best_weights.sum()
+        best_weights /= best_weights.sum() ## ???
 
         JSDs.append(Tone.jsd(freqs, best_weights))
         best_ps.append(best_params)
 
         ### PLOT
-        # plot optimal parameters
-        x = np.arange(best_params[:-6].shape[0])
-        plt.bar(x, best_params[:-6])
-        ds = [round(p,3) for p in best_params[-6:]]
-        plt.xticks(x, [f'{i}\n{ds[j]}'  for i, j in zip(Tone.int_strings, range(6))])
-        plt.title(piece)
-        plt.show()
+        # # plot optimal parameters
+        # x = np.arange(best_params[:-6].shape[0])
+        # plt.bar(x, best_params[:-6])
+        # ds = [round(p,3) for p in best_params[-6:]]
+        # plt.xticks(x, [f'{i}\n{ds[j]}'  for i, j in zip(Tone.int_strings, range(6))])
+        # plt.title(piece)
+        # plt.show()
 
-        # plot both distributions
-        pd.DataFrame(
-            {'original':freqs, 'estimate':best_weights}
-            ).plot(
-                kind='bar',
-                figsize=(12,6)
-            )
-        plt.title(f"JSD: {round(Tone.jsd(freqs, best_weights), 3)}\n{piece}")
-        plt.xticks(np.arange(len(lof)),lof)
-        plt.tight_layout()
-        plt.savefig(f'img/pieces/{piece[5:-4]}_evaluation.png')
-        plt.show()
+        # # plot both distributions
+        # pd.DataFrame(
+        #     {'original':freqs, 'estimate':best_weights}
+        #     ).plot(
+        #         kind='bar',
+        #         figsize=(12,6)
+        #     )
+        # plt.title(f"JSD: {round(Tone.jsd(freqs, best_weights), 3)}\n{piece}")
+        # plt.xticks(np.arange(len(lof)),lof)
+        # plt.tight_layout()
+        # plt.savefig(f'img/pieces/{piece[5:-4]}_evaluation.png')
+        # plt.show()
 
 
-        # plot actual distribution
-        df =pd.read_csv(piece)
-        df['tpc'] = df['tpc'].str.replace('x', '##')
-        fig = tonnetz(
-            df,
-            colorbar=False,
-            figsize=(12,12),
-            cmap='Reds',
-            # nan_color='white',
-            edgecolor='black',
-            show=True
-        )
-        plt.savefig(f'img/pieces/{piece[5:-4]}_tonnetz.png')
+        # # plot actual distribution (has to be adapted to include duration)
+        # df =pd.read_csv(piece)
+        # df['tpc'] = df['tpc'].str.replace('x', '##')
+        # fig = tonnetz(
+        #     df,
+        #     colorbar=False,
+        #     figsize=(12,12),
+        #     cmap='Reds',
+        #     # nan_color='white',
+        #     edgecolor='black',
+        #     show=True
+        # )
+        # plt.savefig(f'img/pieces/{piece[5:-4]}_tonnetz.png')
+        #
+        # # plot inferred distribution
+        # fig = Tone.plot(tones, center, weights=best_weights)
+        # plt.savefig(f'img/pieces/{piece[5:-4]}_estimate.png')
+        # plt.show()
 
-        # plot inferred distribution
-        fig = Tone.plot(tones, center, weights=best_weights)
-        plt.savefig(f'img/pieces/{piece[5:-4]}_estimate.png')
-        plt.show()
-
-    # results = pd.DataFrame(list(zip(JSDs, *list(np.array(best_ps).T), pieces, composers, years)))
-    # results.to_csv('results.tsv', sep='\t', index=False)
+    results = pd.DataFrame(list(zip(JSDs, *list(np.array(best_ps).T), pieces, composers, years)))
+    results.to_csv('results.tsv', sep='\t', index=False)
 
     # fig, ax = plt.subplots(figsize=(18,15))
     # # ax.scatter(np.arange(len(JSDs)), JSDs)
