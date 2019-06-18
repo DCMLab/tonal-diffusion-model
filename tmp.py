@@ -81,7 +81,7 @@ class Tone:
                     edgecolor=(0, 0, 0)))
         plt.axis('equal')
         plt.axis('off')
-        plt.show()
+        return fig
 
     ### Diffusion
 
@@ -179,22 +179,22 @@ if __name__ == "__main__":
 
     ### Example pieces
     ex_pieces = [
-        # 'data/machaut_detoutes.csv',
+        'data/machaut_detoutes.csv',
         # 'data/Gesualdo_OVos.csv',
-        # 'data/Salve-Regina_Lasso.csv',
-        # 'data/BWV_846.csv',
+        'data/Salve-Regina_Lasso.csv',
+        'data/BWV_846.csv',
         # 'data/sonata01-1.csv',
-        # 'data/Sonate_No._17_Tempest_1st_Movement.csv',
-        # 'data/Schubert_90_2.csv',
+        'data/Sonate_No._17_Tempest_1st_Movement.csv',
+        'data/Schubert_90_2.csv',
         # 'data/Wanderer_Fantasy.csv',
         # 'data/Chopin_Opus_28_4.csv',
-        'data/Reichardt_Louise_-_Zwolf_Gesange_No.1_-_Erinnrung_am_Bach.mxl.csv', # worst
-        # 'data/Liszt_Lugubre_gondola_I_200_1.csv',
-        'data/Scherzo_Focoso_Opus_34_in_B_Minor.mxl.csv', # best
+        # 'data/Reichardt_Louise_-_Zwolf_Gesange_No.1_-_Erinnrung_am_Bach.mxl.csv', # worst
+        'data/Liszt_Lugubre_gondola_I_200_1.csv',
+        # 'data/Scherzo_Focoso_Opus_34_in_B_Minor.mxl.csv', # best
         # 'data/Brahms_116_1.csv',
-        # 'data/Satie_-_Gnossiennes_1.csv',
+        'data/Satie_-_Gnossiennes_1.csv',
         # 'data/Ravel_-_Miroirs_I.csv',
-        # 'data/Webern_Variationen_1.csv'
+        'data/Webern_Variationen_1.csv'
     ]
 
     meta = pd.read_csv('../ExtendedTonality/metadata.csv', sep='\t', encoding='utf-8')
@@ -263,6 +263,7 @@ if __name__ == "__main__":
         plt.title(f"JSD: {round(Tone.jsd(freqs, best_weights), 3)}\n{piece}")
         plt.xticks(np.arange(len(lof)),lof)
         plt.tight_layout()
+        plt.savefig(f'img/pieces/{piece[5:-4]}_evaluation.png')
         plt.show()
 
 
@@ -278,9 +279,12 @@ if __name__ == "__main__":
             edgecolor='black',
             show=True
         )
+        plt.savefig(f'img/pieces/{piece[5:-4]}_tonnetz.png')
 
         # plot inferred distribution
-        Tone.plot(tones, center, weights=best_weights)
+        fig = Tone.plot(tones, center, weights=best_weights)
+        plt.savefig(f'img/pieces/{piece[5:-4]}_estimate.png')
+        plt.show()
 
     # results = pd.DataFrame(list(zip(JSDs, *list(np.array(best_ps).T), pieces, composers, years)))
     # results.to_csv('results.tsv', sep='\t', index=False)
