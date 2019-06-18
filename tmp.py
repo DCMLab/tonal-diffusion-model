@@ -287,8 +287,8 @@ if __name__ == "__main__":
         # plt.savefig(f'img/pieces/{piece[5:-4]}_estimate.png')
         # plt.show()
 
-    results = pd.DataFrame(list(zip(JSDs, *list(np.array(best_ps).T), pieces, composers, years)))
-    results.to_csv('results.tsv', sep='\t', index=False)
+    # results = pd.DataFrame(list(zip(JSDs, *list(np.array(best_ps).T), pieces, composers, years)))
+    # results.to_csv('results.tsv', sep='\t', index=False)
 
     # fig, ax = plt.subplots(figsize=(18,15))
     # # ax.scatter(np.arange(len(JSDs)), JSDs)
