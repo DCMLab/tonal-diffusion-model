@@ -189,7 +189,7 @@ if __name__ == "__main__":
         # 'data/Schubert_90_2.csv',
         # 'data/Wanderer_Fantasy.csv',
         # 'data/Chopin_Opus_28_4.csv',
-        'data/Liszt_Lugubre_gondola_I_200_1.csv',
+        # 'data/Liszt_Lugubre_gondola_I_200_1.csv',
         # 'data/Scherzo_Focoso_Opus_34_in_B_Minor.mxl.csv', # best
         # 'data/Brahms_116_1.csv',
         # 'data/Satie_-_Gnossiennes_1.csv',
@@ -206,7 +206,10 @@ if __name__ == "__main__":
         # 'data/wholetone.csv',
         # 'data/heptaton.cs#v',
         # 'data/pentaton.csv',
-        'data/rosamunde.csv'
+        # 'data/rosamunde.csv',
+        # 'data/Beethoven_9_Scherzo_RL.csv',
+        # 'data/Trauervorspiel_und_Trauermarsch_S._206.csv',
+        'data/Symphony_No._9_2nd_Movement.csv'
     ]
 
     meta = pd.read_csv('../ExtendedTonality/metadata.csv', sep='\t', encoding='utf-8')
