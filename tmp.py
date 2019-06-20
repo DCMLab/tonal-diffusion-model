@@ -95,8 +95,10 @@ class Tone:
         -4    # major third down
     ]
 
+    i = len(intervals)
+
     @staticmethod
-    def diffuse(tones, center, action_probs, discount=[0.5]*6, init_dist=None, max_iter=1000):
+    def diffuse(tones, center, action_probs, discount=None, init_dist=None, max_iter=1000):
         n = len(tones)
         # initialize init_dist if not provided or convert to numpy array
         if init_dist is None:
@@ -118,7 +120,10 @@ class Tone:
             for to_idx in range(n):
                 for mat_idx, step in enumerate(Tone.intervals):
                     if to_idx - from_idx == step:
-                        transition_matrices[mat_idx][from_idx, to_idx] = discount[mat_idx]
+                        if len(discount) == 1:
+                            transition_matrices[mat_idx][from_idx, to_idx] = discount[0]
+                        else:
+                            transition_matrices[mat_idx][from_idx, to_idx] = discount[mat_idx]
 
         # diffuse
         current_dist = init_dist.copy()
@@ -180,35 +185,34 @@ if __name__ == "__main__":
 
     ### Example pieces
     ex_pieces = [
-        # 'data/machaut_detoutes.csv',
-        # 'data/Gesualdo_OVos.csv',
-        # 'data/Salve-Regina_Lasso.csv',
-        # 'data/BWV_846.csv',
-        # 'data/sonata01-1.csv',
-        # 'data/Sonate_No._17_Tempest_1st_Movement.csv',
-        # 'data/Schubert_90_2.csv',
-        # 'data/Wanderer_Fantasy.csv',
-        # 'data/Chopin_Opus_28_4.csv',
-        # 'data/Liszt_Lugubre_gondola_I_200_1.csv',
-        # 'data/Scherzo_Focoso_Opus_34_in_B_Minor.mxl.csv', # best
-        # 'data/Brahms_116_1.csv',
-        # 'data/Satie_-_Gnossiennes_1.csv',
-        # 'data/Ravel_-_Miroirs_I.csv',
-        # 'data/Webern_Variationen_1.csv'
-        # 'data/hexa.csv',
-        # 'data/hexa_triads.csv',
-        # 'data/octa.csv',
-        # 'data/octa_triads.csv',
-        # 'data/enneaton.csv',
-        # 'data/triton.csv',
-        # 'data/hexaton.csv',
-        # 'data/dodekaton.csv',
-        # 'data/wholetone.csv',
-        # 'data/heptaton.cs#v',
-        # 'data/pentaton.csv',
-        # 'data/rosamunde.csv',
-        # 'data/Beethoven_9_Scherzo_RL.csv',
-        # 'data/Trauervorspiel_und_Trauermarsch_S._206.csv',
+        'data/machaut_detoutes.csv',
+        'data/Gesualdo_OVos.csv',
+        'data/Salve-Regina_Lasso.csv',
+        'data/BWV_846.csv',
+        'data/sonata01-1.csv',
+        'data/Sonate_No._17_Tempest_1st_Movement.csv',
+        'data/Schubert_90_2.csv',
+        'data/Wanderer_Fantasy.csv',
+        'data/Chopin_Opus_28_4.csv',
+        'data/Liszt_Lugubre_gondola_I_200_1.csv',
+        'data/Scherzo_Focoso_Opus_34_in_B_Minor.mxl.csv', # best
+        'data/Brahms_116_1.csv',
+        'data/Satie_-_Gnossiennes_1.csv',
+        'data/Ravel_-_Miroirs_I.csv',
+        'data/Webern_Variationen_1.csv',
+        'data/hexa.csv',
+        'data/hexa_triads.csv',
+        'data/octa.csv',
+        'data/octa_triads.csv',
+        'data/enneaton.csv',
+        'data/triton.csv',
+        'data/hexaton.csv',
+        'data/dodekaton.csv',
+        'data/wholetone.csv',
+        'data/heptaton.csv',
+        'data/pentaton.csv',
+        'data/rosamunde.csv',
+        'data/Trauervorspiel_und_Trauermarsch_S._206.csv',
         'data/Symphony_No._9_2nd_Movement.csv'
     ]
 
@@ -225,90 +229,95 @@ if __name__ == "__main__":
             composers.append(row.composer)
             years.append(row.display_year)
 
-    ### INFERENCE
-    # Constraint 1: weights and discounts must be between 0 and 1
-    bnds = ((0, 1),) * 6 * 2 # 6 step directions plus discount
-    # Constraint 2: sum of weights must be 1
-    def con(a):
-        return sum(a[:6]) - 1
-    cons = {'type':'eq', 'fun': con}
+    ### set fixed (initial) discount parameter for all intervals
+    for discount in [[.5], [.5]*Tone.i]:
 
-    def cost_f(x, args):
-        weights = Tone.diffuse(tones=tones, center=center, action_probs=x[:-6], discount=x[-6:])
-        weights /= weights.sum() ## ???
-        return Tone.jsd(weights, args)
+        ### INFERENCE
+        # Constraint 1: weights and discounts must be between 0 and 1
+        bnds = [(0, 1)] * Tone.i + [(0,1)] * len(discount) # 6 step directions plus discount
+        # Constraint 2: sum of weights must be 1
+        def con(x):
+            return sum(x[:Tone.i]) - 1
+        cons = {'type':'eq', 'fun': con}
 
-    JSDs = []
-    best_ps = []
-    for piece in tqdm(ex_pieces): # ex_pieces
-        freqs, center = Tone.piece_freqs(piece, by_duration=True)
+        def cost_f(x, args):
+            weights = Tone.diffuse(tones=tones, center=center, action_probs=x[:Tone.i], discount=x[Tone.i:])
+            weights /= weights.sum() ## ???
+            return Tone.jsd(weights, args)
 
-        mini = minimize(
-            fun=cost_f,
-            x0=[1/6] * 6 * 2,
-            args=(freqs),
-            method="SLSQP", # Sequential Least SQares Programming
-            bounds=bnds,
-            constraints=cons
-        )
-        best_params = mini.get('x')
+        JSDs = []
+        best_ps = []
+        for piece in tqdm(pieces): # ex_pieces
+            freqs, center = Tone.piece_freqs(piece, by_duration=True)
 
-        best_weights = Tone.diffuse(tones=tones, center=center, action_probs=best_params[:-6], discount=best_params[-6:])
-        best_weights /= best_weights.sum() ## ???
-
-        JSDs.append(Tone.jsd(freqs, best_weights))
-        best_ps.append(best_params)
-
-        ### PLOT
-        # plot optimal parameters
-        x = np.arange(best_params[:-6].shape[0])
-        plt.bar(x, best_params[:-6])
-        ds = [round(p,3) for p in best_params[-6:]]
-        plt.xticks(x, [f'{i}\n{ds[j]}'  for i, j in zip(Tone.int_strings, range(6))])
-        plt.title(piece)
-        plt.savefig(f'img/pieces/{piece[5:-4]}_best_params.png')
-        plt.show()
-
-        # plot both distributions
-        pd.DataFrame(
-            {'original':freqs, 'estimate':best_weights}
-            ).plot(
-                kind='bar',
-                figsize=(12,6)
+            mini = minimize(
+                fun=cost_f,
+                x0=[1/6] * Tone.i + discount,
+                args=(freqs),
+                method="SLSQP", # Sequential Least SQares Programming
+                bounds=bnds,
+                constraints=cons
             )
-        plt.title(f"JSD: {round(Tone.jsd(freqs, best_weights), 3)}\n{piece}")
-        plt.xticks(np.arange(len(lof)),lof)
+            best_params = mini.get('x')
+
+            best_weights = Tone.diffuse(tones=tones, center=center, action_probs=best_params[:Tone.i], discount=best_params[Tone.i:])
+            best_weights /= best_weights.sum() ## ???
+
+            JSDs.append(Tone.jsd(freqs, best_weights))
+            best_ps.append(best_params)
+
+
+
+            # ### PLOT
+            # # plot optimal parameters
+            # x = np.arange(best_params[:-6].shape[0])
+            # plt.bar(x, best_params[:-6])
+            # ds = [round(p,3) for p in best_params[-6:]]
+            # plt.xticks(x, [f'{i}\n{ds[j]}'  for i, j in zip(Tone.int_strings, range(6))])
+            # plt.title(piece)
+            # plt.savefig(f'img/pieces/{piece[5:-4]}_best_params.png')
+            # plt.show()
+            #
+            # # plot both distributions
+            # pd.DataFrame(
+            #     {'original':freqs, 'estimate':best_weights}
+            #     ).plot(
+            #         kind='bar',
+            #         figsize=(12,6)
+            #     )
+            # plt.title(f"JSD: {round(Tone.jsd(freqs, best_weights), 3)}\n{piece}")
+            # plt.xticks(np.arange(len(lof)),lof)
+            # plt.tight_layout()
+            # plt.savefig(f'img/pieces/{piece[5:-4]}_evaluation.png')
+            # plt.show()
+            #
+            #
+            # # plot actual distribution (has to be adapted to include duration)
+            # df =pd.read_csv(piece)
+            # df['tpc'] = df['tpc'].str.replace('x', '##')
+            # fig = tonnetz(
+            #     df,
+            #     colorbar=False,
+            #     figsize=(12,12),
+            #     cmap='Reds',
+            #     # nan_color='white',
+            #     edgecolor='black',
+            #     show=True
+            # )
+            # plt.savefig(f'img/pieces/{piece[5:-4]}_tonnetz.png')
+            #
+            # # plot inferred distribution
+            # fig = Tone.plot(tones, center, weights=best_weights)
+            # plt.savefig(f'img/pieces/{piece[5:-4]}_estimate.png')
+            # plt.show()
+
+        results = pd.DataFrame(list(zip(JSDs, *list(np.array(best_ps).T), pieces, composers, years)))
+        results.to_csv(f'results_{len(discount)}.tsv', sep='\t', index=False)
+
+        fig, ax = plt.subplots()
+        ax.scatter(np.arange(len(JSDs)), JSDs)
+        # plt.xticks(np.arange(len(JSDs)), pieces, rotation=90)
+        ax.plot(JSDs)
+        plt.title("Jensen-Shannon Divergences")
         plt.tight_layout()
-        plt.savefig(f'img/pieces/{piece[5:-4]}_evaluation.png')
         plt.show()
-
-
-        # plot actual distribution (has to be adapted to include duration)
-        df =pd.read_csv(piece)
-        df['tpc'] = df['tpc'].str.replace('x', '##')
-        fig = tonnetz(
-            df,
-            colorbar=False,
-            figsize=(12,12),
-            cmap='Reds',
-            # nan_color='white',
-            edgecolor='black',
-            show=True
-        )
-        plt.savefig(f'img/pieces/{piece[5:-4]}_tonnetz.png')
-
-        # plot inferred distribution
-        fig = Tone.plot(tones, center, weights=best_weights)
-        plt.savefig(f'img/pieces/{piece[5:-4]}_estimate.png')
-        plt.show()
-
-    # results = pd.DataFrame(list(zip(JSDs, *list(np.array(best_ps).T), pieces, composers, years)))
-    # results.to_csv('results.tsv', sep='\t', index=False)
-
-    fig, ax = plt.subplots(figsize=(18,15))
-    # ax.scatter(np.arange(len(JSDs)), JSDs)
-    # plt.xticks(np.arange(len(JSDs)), pieces, rotation=90)
-    ax.plot(JSDs)
-    plt.title("Jensen-Shannon Divergences")
-    plt.tight_layout()
-    plt.show()
