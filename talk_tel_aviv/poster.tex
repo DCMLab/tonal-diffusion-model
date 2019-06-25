@@ -1,0 +1,357 @@
+% A poster using beamerposter and the gemini theme with epfl colors.
+% Beamerposter will let you create a poster in a single beamer frame
+% using the columns and blocks from the beamer class.
+% The color theme is adapted from Gemini's MIT scheme.
+
+% use beamer as documentclass
+\documentclass[final,cmyk]{beamer}
+
+% use the beamerposter package to create a poster
+\usepackage[scale=1.4,orientation=portrait,size=a0]{beamerposter}
+\usepackage{csquotes}
+\usepackage[backend=biber,firstinits=true,maxbibnames=99,bibencoding=utf8,style=numeric]{biblatex}
+\addbibresource{references.bib}
+% make references small
+\renewcommand*{\bibfont}{\scriptsize}
+
+% use the gemini theme. 
+\usetheme{gemini}
+% use the epfl color theme, defining epfl{dark}red, -{dark}green,  -light, -gray, and -dark
+\usecolortheme{epfl}
+
+\usepackage{graphicx}
+\usepackage{tikz}
+\usepackage{adjustbox}
+\usepackage{qrcode}
+\usepackage{wrapfig}
+
+\newcommand*{\pianoroll}{
+  \draw (0,2) rectangle (1,2.4);
+  \draw (1,2.4) rectangle (2,2.8);
+  \draw (2,2) rectangle (2.5,2.4);
+  \draw (2.5,1.6) rectangle (3,2);
+  \draw (3,1.2) rectangle (3.5,1.6);
+  \draw (3.5,0.8) rectangle (4,1.2);
+  
+  \draw (4,1.6) rectangle (5,2);
+  \draw (5,2) rectangle (6,2.4);
+  \draw (6,1.6) rectangle (6.5,2);
+  \draw (6.5,1.2) rectangle (7,1.6);
+  \draw (7,0.8) rectangle (7.5,1.2);
+  \draw (7.5,0.4) rectangle (8,0.8);
+  
+  \draw (1,-0.4) rectangle (2,0);
+  \draw (2,0) rectangle (4,0.4);
+  \draw (5,-0.8) rectangle (6,-0.4);
+  \draw (6,-0.4) rectangle (8,0);
+}
+
+\newcommand{\sgcross}[1]
+{
+  \begin{scope}[xshift=#1cm,thick,color=epflred]
+    \draw (0.35,0.1) -- (0.55,0.3);
+    \draw (0.55,0.1) -- (0.35,0.3);
+  \end{scope}
+}
+\newcommand{\sgbox}[1]
+{
+  \begin{scope}[xshift=#1cm]
+    \draw (0,0) rectangle (0.9,0.4);
+  \end{scope}
+}
+\newcommand{\sgboxfill}[2]
+{
+  \begin{scope}[xshift=#2cm]
+    \draw[fill=#1] (0,0) rectangle (0.9,0.4);
+  \end{scope}
+}
+\newcommand{\sgrow}[4][epflgray]
+{
+  \begin{scope}[yshift=#2cm]
+    \foreach \x in {0,...,8} { \sgbox{\x} }
+    \foreach \x in {#3} { \sgboxfill{#1}{\x} }
+    \foreach \x in {#4} { \sgcross{\x} }
+  \end{scope}
+}
+
+\title{Generalized Skipgrams}
+
+\author{Christoph Finkensiep, Markus Neuwirth, Martin Rohrmeier}
+
+\institute{Digital and Cognitive Musicology Lab, École Polytechnique Fédérale de Lausanne}
+
+
+\begin{document}
+
+\begin{frame}[t]
+
+  \begin{columns}[t]
+    \begin{column}{0.3\textwidth}
+      \begin{block}{Problem}
+        Many aspects of music are oriented \alert{vertically}
+        (harmony), \alert{horizontally} (melody), or both (voice
+        leading).  However, the structure of music is neither cleanly
+        vertical nor horizontal, but rather irregular in both
+        dimensions.
+
+        \begin{adjustbox}{scale=2.7,center,margin=0 1ex}
+          \begin{tikzpicture}
+            \begin{scope}[color=epflred,thick,->,>=stealth]
+              \draw[<->] (1.5,2.2) -- (1.5,0.2);
+              \draw (4.5,1.8) -- (5.5,2.2);
+              \draw (5.5,2.2) -- (6.25,1.8);
+              \draw (6.25,1.8) -- (6.75,1.4);
+            \end{scope}
+            
+            \pianoroll
+          \end{tikzpicture}
+        \end{adjustbox}
+
+        Vertical structure is usually enforced by \alert{slicing}.
+        This can be problematic for cutting through notes and in cases
+        where vertically related notes do not overlap (and thus do not
+        have a common slice).
+
+        \begin{adjustbox}{scale=2.7,center,margin=0 1ex}
+          \begin{tikzpicture}
+            \foreach \x in {0,1,2,2.5,3,3.5,4,5,6,6.5,7.5,8}
+              \draw[color=epflred] (\x,-1) -- (\x,3);
+            \pianoroll
+          \end{tikzpicture}
+        \end{adjustbox}
+
+        Horizontal structure is often ensured by working on
+        \alert{monophonic voices} or just a single \alert{melody}.
+        This is impractical in the general case, e.g., in piano music.
+        
+        \begin{adjustbox}{scale=2.7,center,margin=0 1ex}
+          \begin{tikzpicture}
+            \pianoroll
+            \draw[color=epflred,very thick] (0,0.4) -- (8,0.4);
+          \end{tikzpicture}
+        \end{adjustbox}
+        
+      \end{block}
+
+      \vspace{5em}
+
+      \begin{block}{Funding and Paper Link}
+        \begin{wrapfigure}{l}{0.3\textwidth}
+          \begin{center}
+            \qrcode[height=0.25\textwidth]{http://ismir2018.ircam.fr/doc/pdfs/202_Paper.pdf}
+          \end{center}
+        \end{wrapfigure}
+        \small
+        The research presented on this poster is generously
+        supported by the Volkswagen Foundation.  We also thank
+        Claude Latour for supporting this research through the
+        Latour Chair in Digital Musicology.  The paper to this
+        poster including all references can be found using the QR
+        code to the left.
+        
+        
+        \includegraphics[width=\textwidth]{../logos/vw/vw.pdf}
+        
+        \includegraphics[width=\textwidth]{../logos/epfl/logo_print.pdf}
+      \end{block}
+    \end{column}
+    
+    \begin{column}{0.3\textwidth}
+      \begin{block}{Solution}
+        We generalize the \alert{skipgram technique},
+        well known in linguistics \autocite{GuthrieCloserLookSkipGram2006}
+        and recently introduced to music research \autocite{SearsModelingHarmonySkipGrams2017}.
+        Skipgrams are similar to $n$-grams (fixed length subsequences of a sequence)
+        but allow a limited amount of \alert{gaps} between their elements.
+
+        \begin{adjustbox}{scale=2.7,center,margin=0 1ex}
+          \begin{tikzpicture}
+            \sgrow{-3.5}{1,3,7}{2,4,5,6}
+    
+            \begin{scope}[yshift=-2cm]
+              \sgboxfill{epflgray}{2.5}
+              \sgboxfill{epflgray}{3.5}
+              \sgboxfill{epflgray}{4.5}
+            \end{scope}
+            \begin{scope}[->,>=stealth]
+              \draw[shorten >=0.5cm,shorten <=0.5cm] (1.45,-3.3) -- (2.95,-1.8);
+              \draw[shorten >=0.4cm,shorten <=0.4cm] (3.45,-3.3) -- (3.95,-1.8);
+              \draw[shorten >=0.8cm,shorten <=0.8cm] (7.45,-3.3) -- (4.95,-1.8);
+            \end{scope}
+          \end{tikzpicture}
+        \end{adjustbox}
+
+        If instead of counting gaps the \enquote{amount of skip} is defined by a
+        \alert{skip function}, the technique can be applied to non-sequential structures.
+        The skip function is applied to consecutive elements in the skipgram.
+        The summed skip must not exceed some parameter $k$.
+
+        \begin{adjustbox}{scale=2.7,center,margin=0 0 0 1ex}
+          \begin{tikzpicture}
+            \pianoroll
+
+            \draw[fill=epflgray] (0,2) rectangle (1,2.4);
+            \draw[fill=epflgray] (6,1.6) rectangle (6.5,2);
+            \draw[fill=epflgray] (2,0) rectangle (4,0.4);
+            
+            \draw (0,2) -- (0,0.4);
+            \draw (2,0.4) -- (2,0.8);
+            \draw (6,1.6) -- (6,0.4);
+            \draw[<->,color=epflred] (0,0.6) -- (2,0.6);
+            \draw[<->,color=epflred] (2,0.6) -- (6,0.6);
+          \end{tikzpicture}
+        \end{adjustbox}
+        \begin{adjustbox}{scale=1.45,margin=0 0 0 1ex}
+          \begin{tikzpicture}[overlay]
+            \node () at (3,4.2) {\scriptsize $d_1$};
+            \node () at (10,4.2) {\scriptsize $d_2$};
+            \node () at (7.5,1.2) {\scriptsize $d_1 + d_2 \leq k$};
+          \end{tikzpicture}
+        \end{adjustbox}
+        
+        Vertical structure can now be described by \alert{skipgrams over notes} in a piece.
+        An appropriate skip function could be the difference between the notes' onsets.
+        This generates fixed-size groups of notes with \alert{limited} (but possible)
+        \alert{non-simultaneity}.
+
+        \begin{adjustbox}{scale=2.7,center,margin=0 1ex}
+          \begin{tikzpicture}
+            \draw[thick,color=epflred] (0.5,2.2) -- (1.5,-0.2);
+            \pianoroll
+            \draw[fill=epflgray] (0,2) rectangle (1,2.4);
+            \draw[fill=epflgray] (1,-0.4) rectangle (2,0);
+          \end{tikzpicture}
+        \end{adjustbox}
+        
+        Horizontal structure can be extracted much like vertical structure.
+        Additionally requiring the notes not to overlap enforces \alert{sequentiality}.
+
+        \begin{adjustbox}{scale=2.7,center,margin=0 1ex}
+          \begin{tikzpicture}
+            \draw[thick,color=epflred] (0.5,2.2) -- (2.75,1.8);
+            \pianoroll
+            \draw[fill=epflgray] (0,2) rectangle (1,2.4);
+            \draw[fill=epflgray] (2.5,1.6) rectangle (3,2);
+          \end{tikzpicture}
+        \end{adjustbox}
+        
+        Horizontal and vertical structure can be combined
+        by \alert{recursive application of skipgrams}.
+        A first pass generates vertical structure as skipgrams over notes (\enquote{stages}).
+        A second step generates horizontal structure as skipgrams over stages,
+        resulting in a nested, two-dimensional pattern.
+
+        \begin{adjustbox}{scale=2.7,center,margin=0 1ex}
+          \begin{tikzpicture}
+            \begin{scope}[thick]
+              \draw (0.5,2.2) -- (1.5,-0.2);
+              \draw (2.75,1.8) -- (3,0.2);
+              \draw (4.5,1.8) -- (5.5,-0.6);
+              \draw[->,color=epflred,>=stealth] (1.25,1) -- (2.5,1);
+              \draw[->,color=epflred,>=stealth] (3.25,1) -- (4.5,1);
+            \end{scope}
+            \pianoroll
+            \draw[fill=epflgray] (1,-0.4) rectangle (2,0);
+            \draw[fill=epflgray] (2,0) rectangle (4,0.4);
+            \draw[fill=epflgray] (0,2) rectangle (1,2.4);
+            \draw[fill=epflgray] (2.5,1.6) rectangle (3,2);
+            \draw[fill=epflgray] (4,1.6) rectangle (5,2);
+            \draw[fill=epflgray] (5,-0.8) rectangle (6,-0.4);
+          \end{tikzpicture}
+        \end{adjustbox}
+      \end{block}
+    \end{column}
+    
+    \begin{column}{0.3\textwidth}
+      \begin{block}{Basic Algorithm}
+        The algorithm for enumerating skipgrams takes as input:
+
+        \begin{itemize}
+        \item a list $L$ of objects to generate skipgrams over
+        \item a skip function $f$ on pairs of objects
+        \item the skipgram length $n$
+        \item the skip limit $k$
+        \end{itemize}
+
+        The list $L$ must be ordered with respect to the skip function:
+        \[\forall i < j < k: f(L_i,L_j) \leq f(L_i,L_z).\]
+        
+        The algorithm returns all sublists $x$ of $L$ with $|x| = n$ and
+        $\sum_i f(x_i,x_{i+1}) \leq k$.
+
+        $L$ is traversed, building up a \alert{list of prefixes}
+        that eventually become complete skipgrams.
+
+        For each element $e$ in $L$:
+        \begin{enumerate}
+        \item remove old prefixes that cannot be extended with $e$
+        \item extend all remaining prefixes with $e$%; of those:
+          %\begin{enumerate}
+          \item output all completed prefixes (length $n$)
+          \item add all incomplete prefixes to the prefix list
+          %\end{enumerate}
+        \item add a new prefix $[e]$.
+        \end{enumerate}
+
+        \begin{adjustbox}{scale=2,center,margin=0 1ex}
+          \begin{tikzpicture}
+            \begin{scope}[scale=0.3]
+              \pianoroll
+              \draw[fill=epflgray] (1,-0.4) rectangle (2,0);
+              \draw[fill=epflgray] (2,2) rectangle (2.5,2.4);
+            \end{scope}
+            
+            \begin{scope}[scale=0.3,yshift=4cm]
+              \fill[epfllight] (-0.25,-1) rectangle (8.25,3);
+              \pianoroll
+              \draw[fill=epflred] (0,2) rectangle (1,2.4);
+              \draw[fill=epflred] (2,2) rectangle (2.5,2.4);
+            \end{scope}
+
+            \begin{scope}[scale=0.3,yshift=8cm]
+              \pianoroll
+              \draw[fill=epflgray] (1,-0.4) rectangle (2,0);
+              \draw[fill=epflgray] (1,2.4) rectangle (2,2.8);
+            \end{scope}
+
+            \draw (2.75,-0.4) -- (2.75,3.2);
+
+            \begin{scope}[xshift=3cm,yshift=0.4cm]
+              \pianoroll
+              \draw[fill=epflgray] (0,2) rectangle (1,2.4);
+              \draw[fill=epflgray] (2,2) rectangle (2.5,2.4);
+              \draw[fill=epflred] (3,1.2) rectangle (3.5,1.6);
+            \end{scope}
+          \end{tikzpicture}
+        \end{adjustbox}
+      \end{block}
+
+      \begin{block}{Extensions}
+        Efficient \alert{filtering} can be implemented
+        by \alert{testing a predicate} on every extension of a prefix.
+        If the new prefix does not satisfy the predicate, it is discarded.
+
+        \alert{Sampling} can be implemented efficiently
+        by \alert{flipping a coin} on every prefix extension,
+        deciding whether to keep or to discard the prefix.
+        A prefix is extended $n-1$ times,
+        so keeping each prefix with probability $\sqrt[n-1]{p}$
+        means keeping the skipgram with probability $p$.
+
+        The output order depends on the last element of each skipgram,
+        because the algorithm outputs skipgrams when they are completed.
+        If the \alert{order of the initial elements} should be retained,
+        completed skipgrams are first entered in a \alert{priority queue}.
+        In each iteration, only those skipgrams are taken from the queue
+        that cannot be preceded by currently active prefixes anymore.
+      \end{block}
+
+      \begin{block}{References}
+          \printbibliography
+      \end{block}
+    \end{column}
+  \end{columns}
+  
+\end{frame} % End of the enclosing frame
+
+\end{document}
