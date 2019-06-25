@@ -182,6 +182,7 @@ class Tone:
 if __name__ == "__main__":
     lof = Tone.get_lof('Fbb', 'B##')
     tones = [Tone((idx, 0), name) for idx, name in enumerate(lof)]
+    dur = True
 
     ### Example pieces
     ex_pieces = [
@@ -248,7 +249,7 @@ if __name__ == "__main__":
         JSDs = []
         best_ps = []
         for piece in tqdm(ex_pieces): # ex_pieces
-            freqs, center = Tone.piece_freqs(piece, by_duration=True)
+            freqs, center = Tone.piece_freqs(piece, by_duration=dur)
 
             mini = minimize(
                 fun=cost_f,
@@ -276,7 +277,7 @@ if __name__ == "__main__":
             plt.xticks(x, [f'{i}\n{ds[j]}'  for i, j in zip(Tone.int_strings, range(6))])
             plt.title(piece)
             plt.savefig(f'img/pieces/{piece[5:-4]}_best_params.png')
-            # plt.show()
+            plt.show()
 
             # plot both distributions
             pd.DataFrame(
@@ -289,7 +290,7 @@ if __name__ == "__main__":
             plt.xticks(np.arange(len(lof)),lof)
             plt.tight_layout()
             plt.savefig(f'img/pieces/{piece[5:-4]}_evaluation.png')
-            # plt.show()
+            plt.show()
 
 
             # plot actual distribution (has to be adapted to include duration)
@@ -302,14 +303,15 @@ if __name__ == "__main__":
                 cmap='Reds',
                 # nan_color='white',
                 edgecolor='black',
-                show=False
+                show=True,
+                duration=dur
             )
             plt.savefig(f'img/pieces/{piece[5:-4]}_tonnetz.png')
 
             # plot inferred distribution
             fig = Tone.plot(tones, center, weights=best_weights)
             plt.savefig(f'img/pieces/{piece[5:-4]}_estimate.png')
-            # plt.show()
+            plt.show()
 
         results = pd.DataFrame(list(zip(JSDs, *list(np.array(best_ps).T), pieces, composers, years)))
         results.to_csv(f'results_{len(discount)}.tsv', sep='\t', index=False)
@@ -320,4 +322,4 @@ if __name__ == "__main__":
         ax.plot(JSDs)
         plt.title("Jensen-Shannon Divergences")
         plt.tight_layout()
-        # plt.show()
+        plt.show()
