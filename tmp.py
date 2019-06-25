@@ -247,7 +247,7 @@ if __name__ == "__main__":
 
         JSDs = []
         best_ps = []
-        for piece in tqdm(pieces): # ex_pieces
+        for piece in tqdm(ex_pieces): # ex_pieces
             freqs, center = Tone.piece_freqs(piece, by_duration=True)
 
             mini = minimize(
@@ -268,47 +268,47 @@ if __name__ == "__main__":
 
 
 
-            # ### PLOT
-            # # plot optimal parameters
-            # x = np.arange(best_params[:-6].shape[0])
-            # plt.bar(x, best_params[:-6])
-            # ds = [round(p,3) for p in best_params[-6:]]
-            # plt.xticks(x, [f'{i}\n{ds[j]}'  for i, j in zip(Tone.int_strings, range(6))])
-            # plt.title(piece)
-            # plt.savefig(f'img/pieces/{piece[5:-4]}_best_params.png')
+            ### PLOT
+            # plot optimal parameters
+            x = np.arange(best_params[:-6].shape[0])
+            plt.bar(x, best_params[:-6])
+            ds = [round(p,3) for p in best_params[-6:]]
+            plt.xticks(x, [f'{i}\n{ds[j]}'  for i, j in zip(Tone.int_strings, range(6))])
+            plt.title(piece)
+            plt.savefig(f'img/pieces/{piece[5:-4]}_best_params.png')
             # plt.show()
-            #
-            # # plot both distributions
-            # pd.DataFrame(
-            #     {'original':freqs, 'estimate':best_weights}
-            #     ).plot(
-            #         kind='bar',
-            #         figsize=(12,6)
-            #     )
-            # plt.title(f"JSD: {round(Tone.jsd(freqs, best_weights), 3)}\n{piece}")
-            # plt.xticks(np.arange(len(lof)),lof)
-            # plt.tight_layout()
-            # plt.savefig(f'img/pieces/{piece[5:-4]}_evaluation.png')
+
+            # plot both distributions
+            pd.DataFrame(
+                {'original':freqs, 'estimate':best_weights}
+                ).plot(
+                    kind='bar',
+                    figsize=(12,6)
+                )
+            plt.title(f"JSD: {round(Tone.jsd(freqs, best_weights), 3)}\n{piece}")
+            plt.xticks(np.arange(len(lof)),lof)
+            plt.tight_layout()
+            plt.savefig(f'img/pieces/{piece[5:-4]}_evaluation.png')
             # plt.show()
-            #
-            #
-            # # plot actual distribution (has to be adapted to include duration)
-            # df =pd.read_csv(piece)
-            # df['tpc'] = df['tpc'].str.replace('x', '##')
-            # fig = tonnetz(
-            #     df,
-            #     colorbar=False,
-            #     figsize=(12,12),
-            #     cmap='Reds',
-            #     # nan_color='white',
-            #     edgecolor='black',
-            #     show=True
-            # )
-            # plt.savefig(f'img/pieces/{piece[5:-4]}_tonnetz.png')
-            #
-            # # plot inferred distribution
-            # fig = Tone.plot(tones, center, weights=best_weights)
-            # plt.savefig(f'img/pieces/{piece[5:-4]}_estimate.png')
+
+
+            # plot actual distribution (has to be adapted to include duration)
+            df =pd.read_csv(piece)
+            df['tpc'] = df['tpc'].str.replace('x', '##')
+            fig = tonnetz(
+                df,
+                colorbar=False,
+                figsize=(12,12),
+                cmap='Reds',
+                # nan_color='white',
+                edgecolor='black',
+                show=False
+            )
+            plt.savefig(f'img/pieces/{piece[5:-4]}_tonnetz.png')
+
+            # plot inferred distribution
+            fig = Tone.plot(tones, center, weights=best_weights)
+            plt.savefig(f'img/pieces/{piece[5:-4]}_estimate.png')
             # plt.show()
 
         results = pd.DataFrame(list(zip(JSDs, *list(np.array(best_ps).T), pieces, composers, years)))
@@ -320,4 +320,4 @@ if __name__ == "__main__":
         ax.plot(JSDs)
         plt.title("Jensen-Shannon Divergences")
         plt.tight_layout()
-        plt.show()
+        # plt.show()
