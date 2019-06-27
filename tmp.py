@@ -3,6 +3,8 @@ import matplotlib.pyplot as plt
 plt.style.use('ggplot')
 from pitchplots.static import tonnetz
 
+import subprocess
+
 import numpy as np
 from scipy.optimize import minimize
 from scipy.stats import entropy
@@ -98,7 +100,16 @@ class Tone:
     i = len(intervals)
 
     @staticmethod
-    def diffuse(tones, center, action_probs, discount=None, init_dist=None, max_iter=1000):
+    def diffuse(tones,
+                center,
+                action_probs,
+                discount=None,
+                init_dist=None,
+                max_iter=1000,
+                atol=1e-2,
+                alpha=1,
+                raise_on_max_iter=True,
+                animate=False):
         n = len(tones)
         # initialize init_dist if not provided or convert to numpy array
         if init_dist is None:
@@ -128,17 +139,23 @@ class Tone:
         # diffuse
         current_dist = init_dist.copy()
         next_dist = np.zeros_like(current_dist)
+        intermediate_dists = [current_dist]
         for iteration in range(max_iter):
             np.copyto(next_dist, init_dist)
             for a_idx, a_prob in enumerate(action_probs):
                 next_dist += a_prob * np.einsum('i,ij->j', current_dist, transition_matrices[a_idx])
-            if np.all(np.isclose(current_dist, next_dist, atol=1e-2)):
+            if np.all(np.isclose(current_dist, next_dist, atol=atol)):
                 break
             else:
                 # use new distribution as current for next iteration
-                np.copyto(current_dist, next_dist)
+                current_dist = (1 - alpha) * current_dist + alpha * next_dist
+                if animate:
+                    intermediate_dists.append(current_dist)
         else:
-            raise UserWarning(f"Did not converge after {iteration} iterations")
+            if raise_on_max_iter:
+                raise UserWarning(f"Did not converge after {iteration} iterations")
+        if animate:
+            return intermediate_dists
         return next_dist
 
     def __init__(self, loc, name, weight=0):
@@ -180,6 +197,29 @@ class Tone:
 
 
 if __name__ == "__main__":
+
+    lof = Tone.get_lof('Fbb', 'B##')
+    tones = [Tone((idx, 0), name) for idx, name in enumerate(lof)]
+    weights = Tone.diffuse(tones=tones,
+                           center="C",
+                           action_probs=[1, 0.5, 0, 0, 0, 0],
+                           discount=[0.99],
+                           # atol=0.1,
+                           max_iter=25,
+                           raise_on_max_iter=False,
+                           alpha=1,
+                           animate=True)
+    for idx, w in enumerate(weights):
+        fig = Tone.plot(tones, 'C', w)
+        fig.tight_layout()
+        file_name = f"animation_{str(idx).zfill(4)}.png"
+        print(f"saving '{file_name}'")
+        fig.savefig(file_name)
+        plt.close(fig)
+    # create video by calling (adjust speed via framerate):
+    # ffmpeg -framerate 10 -pattern_type glob -i './animation_*.png' -c:v libx264 -r 30 -pix_fmt yuv420p animation.mp4
+    exit()
+
     lof = Tone.get_lof('Fbb', 'B##')
     tones = [Tone((idx, 0), name) for idx, name in enumerate(lof)]
     dur = True
