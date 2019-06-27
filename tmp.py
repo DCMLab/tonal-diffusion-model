@@ -225,37 +225,7 @@ if __name__ == "__main__":
     dur = True
 
     ### Example pieces
-    ex_pieces = [
-        'data/machaut_detoutes.csv',
-        'data/Gesualdo_OVos.csv',
-        'data/Salve-Regina_Lasso.csv',
-        'data/BWV_846.csv',
-        'data/sonata01-1.csv',
-        'data/Sonate_No._17_Tempest_1st_Movement.csv',
-        'data/Schubert_90_2.csv',
-        'data/Wanderer_Fantasy.csv',
-        'data/Chopin_Opus_28_4.csv',
-        'data/Liszt_Lugubre_gondola_I_200_1.csv',
-        'data/Scherzo_Focoso_Opus_34_in_B_Minor.mxl.csv', # best
-        'data/Brahms_116_1.csv',
-        'data/Satie_-_Gnossiennes_1.csv',
-        'data/Ravel_-_Miroirs_I.csv',
-        'data/Webern_Variationen_1.csv',
-        'data/hexa.csv',
-        'data/hexa_triads.csv',
-        'data/octa.csv',
-        'data/octa_triads.csv',
-        'data/enneaton.csv',
-        'data/triton.csv',
-        'data/hexaton.csv',
-        'data/dodekaton.csv',
-        'data/wholetone.csv',
-        'data/heptaton.csv',
-        'data/pentaton.csv',
-        'data/rosamunde.csv',
-        'data/Trauervorspiel_und_Trauermarsch_S._206.csv',
-        'data/Symphony_No._9_2nd_Movement.csv'
-    ]
+    ex_pieces = glob.glob("data/*.csv")
 
     meta = pd.read_csv('../ExtendedTonality/metadata.csv', sep='\t', encoding='utf-8')
     meta = meta[meta.filename.notnull()]
