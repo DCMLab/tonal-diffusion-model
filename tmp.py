@@ -199,27 +199,27 @@ class Tone:
 
 if __name__ == "__main__":
 
-    # lof = Tone.get_lof('Fbb', 'B##')
-    # tones = [Tone((idx, 0), name) for idx, name in enumerate(lof)]
-    # weights = Tone.diffuse(tones=tones,
-    #                        center="C",
-    #                        action_probs=[1, 0.5, 0, 0, 0, 0],
-    #                        discount=[0.99],
-    #                        # atol=0.1,
-    #                        max_iter=25,
-    #                        raise_on_max_iter=False,
-    #                        alpha=1,
-    #                        animate=True)
-    # for idx, w in enumerate(weights):
-    #     fig = Tone.plot(tones, 'C', w)
-    #     fig.tight_layout()
-    #     file_name = f"animation_{str(idx).zfill(4)}.png"
-    #     print(f"saving '{file_name}'")
-    #     fig.savefig(file_name)
-    #     plt.close(fig)
-    # # create video by calling (adjust speed via framerate):
-    # # ffmpeg -framerate 10 -pattern_type glob -i './animation_*.png' -c:v libx264 -r 30 -pix_fmt yuv420p animation.mp4
-    # exit()
+    lof = Tone.get_lof('Fbb', 'B##')
+    tones = [Tone((idx, 0), name) for idx, name in enumerate(lof)]
+    weights = Tone.diffuse(tones=tones,
+                           center="C",
+                           action_probs=[0, 00, 0, 0, 0, 0],
+                           discount=[0.1],
+                           # atol=0.1,
+                           max_iter=25,
+                           raise_on_max_iter=False,
+                           alpha=1,
+                           animate=True)
+    for idx, w in enumerate(weights):
+        fig = Tone.plot(tones, 'C', w)
+        fig.tight_layout()
+        file_name = f"animation_{str(idx).zfill(4)}.png"
+        print(f"saving '{file_name}'")
+        fig.savefig(file_name)
+        plt.close(fig)
+    # create video by calling (adjust speed via framerate):
+    # ffmpeg -framerate 10 -pattern_type glob -i './animation_*.png' -c:v libx264 -r 30 -pix_fmt yuv420p animation.mp4
+    exit()
 
     lof = Tone.get_lof('Fbb', 'B##')
     tones = [Tone((idx, 0), name) for idx, name in enumerate(lof)]
@@ -242,7 +242,7 @@ if __name__ == "__main__":
             years.append(row.display_year)
 
     ### set fixed (initial) discount parameter for all intervals
-    for discount in [[.5], [.5]*Tone.i]:
+    for discount in [[.5]*Tone.i]:#[.5],
 
         ### INFERENCE
         # Constraint 1: weights and discounts must be between 0 and 1
@@ -259,7 +259,7 @@ if __name__ == "__main__":
 
         JSDs = []
         best_ps = []
-        for piece in tqdm(ex_pieces[19:20]):
+        for piece in tqdm([ex_pieces[i] for i in [1,10,18]]):
             freqs, center = Tone.piece_freqs(piece, by_duration=dur)
 
             mini = minimize(
@@ -296,65 +296,70 @@ if __name__ == "__main__":
             plt.close()
             # create video by calling (adjust speed via framerate):
             # ffmpeg -framerate 10 -pattern_type glob -i './animation_*.png' -c:v libx264 -r 30 -pix_fmt yuv420p animation.mp4
-            exit()
+            # exit()
 
 
-            JSDs.append(Tone.jsd(freqs, best_weights))
+            # JSDs.append(Tone.jsd(freqs, best_weights))
             best_ps.append(best_params)
 
 
 
             ### PLOT
             # plot optimal parameters
+
+            fig, ax = plt.subplots(figsize=(6,6))
             x = np.arange(best_params[:-6].shape[0])
-            plt.bar(x, best_params[:-6])
+            ax.bar(x, best_params[:-6])
             ds = [round(p,3) for p in best_params[-6:]]
             plt.xticks(x, [f'{i}\n{ds[j]}'  for i, j in zip(Tone.int_strings, range(6))])
-            plt.title(piece)
-            plt.savefig(f'img/pieces/{piece[5:-4]}_best_params.png')
-            plt.show()
-
-            # plot both distributions
-            pd.DataFrame(
-                {'original':freqs, 'estimate':best_weights}
-                ).plot(
-                    kind='bar',
-                    figsize=(12,6)
-                )
-            plt.title(f"JSD: {round(Tone.jsd(freqs, best_weights), 3)}\n{piece}")
-            plt.xticks(np.arange(len(lof)),lof)
+            ax.tick_params(axis='both', which='both', labelsize=14)
+            # plt.title(piece)
+            plt.ylim(0,1)
             plt.tight_layout()
-            plt.savefig(f'img/pieces/{piece[5:-4]}_evaluation.png')
+            plt.savefig(f'img/pieces/{piece[5:-4]}_best_params.png', dpi=300)
             plt.show()
 
-
-            # plot actual distribution (has to be adapted to include duration)
-            df =pd.read_csv(piece)
-            df['tpc'] = df['tpc'].str.replace('x', '##')
-            fig = tonnetz(
-                df,
-                colorbar=False,
-                figsize=(12,12),
-                cmap='Reds',
-                # nan_color='white',
-                edgecolor='black',
-                show=True,
-                duration=dur
-            )
-            plt.savefig(f'img/pieces/{piece[5:-4]}_tonnetz.png')
-
-            # plot inferred distribution
-            fig = Tone.plot(tones, center, weights=best_weights)
-            plt.savefig(f'img/pieces/{piece[5:-4]}_estimate.png')
-            plt.show()
-
-        results = pd.DataFrame(list(zip(JSDs, *list(np.array(best_ps).T), pieces, composers, years)))
-        results.to_csv(f'results_{len(discount)}.tsv', sep='\t', index=False)
-
-        fig, ax = plt.subplots()
-        ax.scatter(np.arange(len(JSDs)), JSDs)
-        # plt.xticks(np.arange(len(JSDs)), pieces, rotation=90)
-        ax.plot(JSDs)
-        plt.title("Jensen-Shannon Divergences")
-        plt.tight_layout()
-        plt.show()
+        #     # plot both distributions
+        #     pd.DataFrame(
+        #         {'original':freqs, 'estimate':best_weights}
+        #         ).plot(
+        #             kind='bar',
+        #             figsize=(12,6)
+        #         )
+        #     plt.title(f"JSD: {round(Tone.jsd(freqs, best_weights), 3)}\n{piece}")
+        #     plt.xticks(np.arange(len(lof)),lof)
+        #     plt.tight_layout()
+        #     plt.savefig(f'img/pieces/{piece[5:-4]}_evaluation.png')
+        #     plt.show()
+        #
+        #
+        #     # plot actual distribution (has to be adapted to include duration)
+        #     df =pd.read_csv(piece)
+        #     df['tpc'] = df['tpc'].str.replace('x', '##')
+        #     fig = tonnetz(
+        #         df,
+        #         colorbar=False,
+        #         figsize=(12,12),
+        #         cmap='Reds',
+        #         # nan_color='white',
+        #         edgecolor='black',
+        #         show=True,
+        #         duration=dur
+        #     )
+        #     plt.savefig(f'img/pieces/{piece[5:-4]}_tonnetz.png')
+        #
+        #     # plot inferred distribution
+        #     fig = Tone.plot(tones, center, weights=best_weights)
+        #     plt.savefig(f'img/pieces/{piece[5:-4]}_estimate.png')
+        #     plt.show()
+        #
+        # results = pd.DataFrame(list(zip(JSDs, *list(np.array(best_ps).T), pieces, composers, years)))
+        # results.to_csv(f'results_{len(discount)}.tsv', sep='\t', index=False)
+        #
+        # fig, ax = plt.subplots()
+        # ax.scatter(np.arange(len(JSDs)), JSDs)
+        # # plt.xticks(np.arange(len(JSDs)), pieces, rotation=90)
+        # ax.plot(JSDs)
+        # plt.title("Jensen-Shannon Divergences")
+        # plt.tight_layout()
+        # plt.show()
