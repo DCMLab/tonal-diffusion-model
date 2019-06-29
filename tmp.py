@@ -61,7 +61,7 @@ class Tone:
 
         cmap = mpl.cm.get_cmap('Reds')
 
-        fig, ax = plt.subplots(1, 1, figsize=(15, 10))
+        fig, ax = plt.subplots(1, 1, figsize=(10, 10))
         center_x, center_y = [t.loc for t in tones if t.name == center][0]
         x_min = center_x - 3
         x_max = center_x + 3
@@ -75,7 +75,8 @@ class Tone:
                 ax.text(*loc,
                         t.name,
                         horizontalalignment='center',
-                        verticalalignment='center')
+                        verticalalignment='center',
+                        fontsize=16)
                 ax.add_patch(mpl.patches.CirclePolygon(
                     loc,
                     radius=np.tan(np.pi / 6),
@@ -198,27 +199,27 @@ class Tone:
 
 if __name__ == "__main__":
 
-    lof = Tone.get_lof('Fbb', 'B##')
-    tones = [Tone((idx, 0), name) for idx, name in enumerate(lof)]
-    weights = Tone.diffuse(tones=tones,
-                           center="C",
-                           action_probs=[1, 0.5, 0, 0, 0, 0],
-                           discount=[0.99],
-                           # atol=0.1,
-                           max_iter=25,
-                           raise_on_max_iter=False,
-                           alpha=1,
-                           animate=True)
-    for idx, w in enumerate(weights):
-        fig = Tone.plot(tones, 'C', w)
-        fig.tight_layout()
-        file_name = f"animation_{str(idx).zfill(4)}.png"
-        print(f"saving '{file_name}'")
-        fig.savefig(file_name)
-        plt.close(fig)
-    # create video by calling (adjust speed via framerate):
-    # ffmpeg -framerate 10 -pattern_type glob -i './animation_*.png' -c:v libx264 -r 30 -pix_fmt yuv420p animation.mp4
-    exit()
+    # lof = Tone.get_lof('Fbb', 'B##')
+    # tones = [Tone((idx, 0), name) for idx, name in enumerate(lof)]
+    # weights = Tone.diffuse(tones=tones,
+    #                        center="C",
+    #                        action_probs=[1, 0.5, 0, 0, 0, 0],
+    #                        discount=[0.99],
+    #                        # atol=0.1,
+    #                        max_iter=25,
+    #                        raise_on_max_iter=False,
+    #                        alpha=1,
+    #                        animate=True)
+    # for idx, w in enumerate(weights):
+    #     fig = Tone.plot(tones, 'C', w)
+    #     fig.tight_layout()
+    #     file_name = f"animation_{str(idx).zfill(4)}.png"
+    #     print(f"saving '{file_name}'")
+    #     fig.savefig(file_name)
+    #     plt.close(fig)
+    # # create video by calling (adjust speed via framerate):
+    # # ffmpeg -framerate 10 -pattern_type glob -i './animation_*.png' -c:v libx264 -r 30 -pix_fmt yuv420p animation.mp4
+    # exit()
 
     lof = Tone.get_lof('Fbb', 'B##')
     tones = [Tone((idx, 0), name) for idx, name in enumerate(lof)]
@@ -258,7 +259,7 @@ if __name__ == "__main__":
 
         JSDs = []
         best_ps = []
-        for piece in tqdm(ex_pieces): # ex_pieces
+        for piece in tqdm(ex_pieces[1:2]):
             freqs, center = Tone.piece_freqs(piece, by_duration=dur)
 
             mini = minimize(
@@ -271,8 +272,32 @@ if __name__ == "__main__":
             )
             best_params = mini.get('x')
 
-            best_weights = Tone.diffuse(tones=tones, center=center, action_probs=best_params[:Tone.i], discount=best_params[Tone.i:])
+            best_weights = Tone.diffuse(tones=tones,
+                                        center=center,
+                                        action_probs=best_params[:Tone.i],
+                                        discount=best_params[Tone.i:],
+                                        animate=True
+                                        )
+            best_weights = np.array(best_weights)
             best_weights /= best_weights.sum() ## ???
+
+            for idx, w in enumerate(best_weights):
+                fig = Tone.plot(tones, center, w)
+                fig.tight_layout()
+                file_name = f"animation_{str(idx).zfill(4)}.png"
+                print(f"saving '{file_name}'")
+                fig.savefig(file_name)
+                plt.close(fig)
+
+            # also plot actual distribution
+            fig = Tone.plot(tones, center, freqs)
+            fig.tight_layout()
+            fig.savefig('piece_dist.png')
+            plt.close()
+            # create video by calling (adjust speed via framerate):
+            # ffmpeg -framerate 10 -pattern_type glob -i './animation_*.png' -c:v libx264 -r 30 -pix_fmt yuv420p animation.mp4
+            exit()
+
 
             JSDs.append(Tone.jsd(freqs, best_weights))
             best_ps.append(best_params)
