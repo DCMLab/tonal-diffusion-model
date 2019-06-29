@@ -259,7 +259,7 @@ if __name__ == "__main__":
 
         JSDs = []
         best_ps = []
-        for piece in tqdm(ex_pieces[1:2]):
+        for piece in tqdm(ex_pieces[19:20]):
             freqs, center = Tone.piece_freqs(piece, by_duration=dur)
 
             mini = minimize(
