@@ -107,10 +107,12 @@ class Tone:
                 discount=None,
                 init_dist=None,
                 max_iter=1000,
-                atol=1e-2,
+                atol=1e-10,
                 alpha=1,
                 raise_on_max_iter=True,
-                animate=False):
+                animate=False,
+                normalize_action_probs=True,
+                open_boundary=False):
         n = len(tones)
         # initialize init_dist if not provided or convert to numpy array
         if init_dist is None:
@@ -123,25 +125,30 @@ class Tone:
         if not np.isclose(np.sum(init_dist), 1.):
             raise UserWarning(f"Init dist not normalized (sum={np.sum(init_dist)})")
 
-        # normalize action_probs and convert to numpy array
+        # convert action_probs to numpy array
         action_probs = np.array(action_probs)
-        action_probs = action_probs / np.sum(action_probs)
-        # initialize transition matrices
-        transition_matrices = [np.zeros((n, n)) for _ in action_probs]
+        # normalize
+        if normalize_action_probs:
+            action_probs = action_probs / np.sum(action_probs)
+        # construct transition matrix
+        pi = np.zeros((n, n))
         for from_idx in range(n):
-            for to_idx in range(n):
-                for mat_idx, step in enumerate(Tone.intervals):
-                    if to_idx - from_idx == step:
-                        transition_matrices[mat_idx][from_idx, to_idx] = discount
+            for action_idx, step in enumerate(Tone.intervals):
+                to_idx = from_idx + step
+                if 0 <= to_idx < n:
+                    # step is within bounds
+                    pi[from_idx, to_idx] += action_probs[action_idx]
+                elif not open_boundary:
+                    # step would "leave" tonal range --> action has no effect
+                    pi[from_idx, from_idx] += action_probs[action_idx]
+        if not open_boundary:
+            np.testing.assert_almost_equal(pi.sum(axis=1), 1)
         # diffuse
-        current_dist = init_dist.copy() * (1 - discount)
-        next_dist = np.zeros_like(current_dist)
-        intermediate_dists = [current_dist]
+        current_dist = np.zeros_like(init_dist)
+        next_dist = np.zeros_like(init_dist)
+        intermediate_dists = []
         for iteration in range(max_iter):
-            np.copyto(next_dist, init_dist)
-            next_dist *= (1 - discount)
-            for a_idx, a_prob in enumerate(action_probs):
-                next_dist += a_prob * np.einsum('i,ij->j', current_dist, transition_matrices[a_idx])
+            next_dist = (1 - discount) * init_dist + discount * np.einsum('ij,i->j', pi, current_dist)
             if np.all(np.isclose(current_dist, next_dist, atol=atol)):
                 break
             else:
@@ -152,13 +159,15 @@ class Tone:
         else:
             if raise_on_max_iter:
                 raise UserWarning(f"Did not converge after {iteration} iterations")
-        norm = next_dist.sum()
-        # check normalization (approximately because of numerical roundoff)
-        np.testing.assert_almost_equal(norm, 1, decimal=2)
+        # check for approximate normalization
+        if not open_boundary:
+            norm = next_dist.sum()
+            np.testing.assert_almost_equal(norm, 1, decimal=2)
+        # normalize (for open boundary and to eliminate roundoff errors)
+        next_dist /= next_dist.sum()
         if animate:
             return intermediate_dists
-        # return normalized (--> excact) distribution
-        return next_dist / norm
+        return next_dist
 
     def __init__(self, loc, name, weight=0):
         self.loc = np.array(loc)
