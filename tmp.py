@@ -243,7 +243,7 @@ if __name__ == "__main__":
             years.append(row.display_year)
 
     ### set fixed (initial) discount parameter for all intervals
-
+    discount = .5
     ### INFERENCE
     # Constraint 1: weights and discounts must be between 0 and 1
     bnds = [(0, 1)] * Tone.i + [(0,1)] # 6 step directions plus discount
