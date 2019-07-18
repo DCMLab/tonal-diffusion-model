@@ -107,13 +107,12 @@ class Tone:
                 discount=None,
                 init_dist=None,
                 max_iter=1000,
-                atol=1e-10,
+                atol=1e-2,
                 alpha=1,
                 raise_on_max_iter=True,
                 animate=False,
                 normalize_action_probs=True,
-                open_boundary=True,
-                check_final_normalization=True):
+                open_boundary=True):
         n = len(tones)
         # initialize init_dist if not provided or convert to numpy array
         if init_dist is None:
@@ -145,7 +144,7 @@ class Tone:
         if not open_boundary:
             np.testing.assert_almost_equal(pi.sum(axis=1), 1)
         # diffuse
-        current_dist = np.zeros_like(init_dist)
+        current_dist = init_dist.copy()
         next_dist = np.zeros_like(init_dist)
         intermediate_dists = []
         for iteration in range(max_iter):
@@ -161,9 +160,9 @@ class Tone:
             if raise_on_max_iter:
                 raise UserWarning(f"Did not converge after {iteration} iterations")
         # check for approximate normalization
-        if not open_boundary and check_final_normalization:
+        if not open_boundary:
             norm = next_dist.sum()
-            np.testing.assert_almost_equal(norm, 1, decimal=2)
+            np.testing.assert_almost_equal(norm, 1)
         # normalize (for open boundary and to eliminate roundoff errors)
         next_dist /= next_dist.sum()
         if animate:

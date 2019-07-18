@@ -12,6 +12,7 @@ class TestDiffusion(TestCase):
                     tones = [Tone((idx, 0), name) for idx, name in enumerate(lof)]
                     Tone.diffuse(tones=tones,
                                  center="C",
+                                 atol=1e-2,
                                  action_probs=np.random.uniform(0, 1, 6),
                                  discount=np.random.uniform(0, 1, 1),
                                  open_boundary=open_boundary)
