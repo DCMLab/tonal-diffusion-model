@@ -229,10 +229,10 @@ if __name__ == "__main__":
     ### Example pieces
     ex_pieces = glob.glob("data/*.csv")
 
-    meta = pd.read_csv('../ExtendedTonality/metadata.csv', sep='\t', encoding='utf-8')
-    meta = meta[meta.filename.notnull()]
-    path = '..\\ExtendedTonality\\data\\DataFrames\\'
-    csvs = [f for f in glob.glob(path+"*.csv")]
+    # meta = pd.read_csv('../ExtendedTonality/metadata.csv', sep='\t', encoding='utf-8')
+    # meta = meta[meta.filename.notnull()]
+    # path = '..\\ExtendedTonality\\data\\DataFrames\\'
+    # csvs = [f for f in glob.glob(path+"*.csv")]
     pieces = []
     composers = []
     years = []
