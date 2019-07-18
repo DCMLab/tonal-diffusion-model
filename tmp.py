@@ -242,7 +242,7 @@ if __name__ == "__main__":
             years.append(row.display_year)
 
     ### set fixed (initial) discount parameter for all intervals
-    for discount in [[.5]*Tone.i]:#[.5],
+    for discount in [[.5]]: # [[.5]*Tone.i]:
 
         ### INFERENCE
         # Constraint 1: weights and discounts must be between 0 and 1
@@ -259,7 +259,7 @@ if __name__ == "__main__":
 
         JSDs = []
         best_ps = []
-        for piece in tqdm([ex_pieces[i] for i in [0, 2,11,19]]):
+        for piece in tqdm(pieces): # [ex_pieces[i] for i in [0, 2,11,19]]
             freqs, center = Tone.piece_freqs(piece, by_duration=dur)
 
             mini = minimize(
@@ -299,38 +299,36 @@ if __name__ == "__main__":
             # exit()
 
 
-            # JSDs.append(Tone.jsd(freqs, best_weights))
+            JSDs.append(Tone.jsd(freqs, best_weights))
             best_ps.append(best_params)
-
-
 
             ### PLOT
             # plot optimal parameters
 
-            fig, ax = plt.subplots(figsize=(6,6))
-            x = np.arange(best_params[:-6].shape[0])
-            ax.bar(x, best_params[:-6])
-            ds = [round(p,3) for p in best_params[-6:]]
-            plt.xticks(x, [f'{i}\n{ds[j]}'  for i, j in zip(Tone.int_strings, range(6))])
-            ax.tick_params(axis='both', which='both', labelsize=14)
-            # plt.title(piece)
-            plt.ylim(0,1)
-            plt.tight_layout()
-            plt.savefig(f'img/pieces/{piece[5:-4]}_best_params.png', dpi=300)
-            plt.show()
+            # fig, ax = plt.subplots(figsize=(6,6))
+            # x = np.arange(best_params[:-6].shape[0])
+            # ax.bar(x, best_params[:-6])
+            # ds = [round(p,3) for p in best_params[-6:]]
+            # plt.xticks(x, [f'{i}\n{ds[j]}'  for i, j in zip(Tone.int_strings, range(6))])
+            # ax.tick_params(axis='both', which='both', labelsize=14)
+            # # plt.title(piece)
+            # plt.ylim(0,1)
+            # plt.tight_layout()
+            # plt.savefig(f'img/pieces/{piece[5:-4]}_best_params.png', dpi=300)
+            # plt.show()
 
         #     # plot both distributions
-            pd.DataFrame(
-                {'original':freqs, 'estimate':best_weights}
-                ).plot(
-                    kind='bar',
-                    figsize=(12,6)
-                )
-            plt.title(f"JSD: {round(Tone.jsd(freqs, best_weights), 3)}") # \n{piece}
-            plt.xticks(np.arange(len(lof)),lof)
-            plt.tight_layout()
-            plt.savefig(f'img/pieces/{piece[5:-4]}_evaluation.png')
-            plt.show()
+            # pd.DataFrame(
+            #     {'original':freqs, 'estimate':best_weights}
+            #     ).plot(
+            #         kind='bar',
+            #         figsize=(12,6)
+            #     )
+            # plt.title(f"JSD: {round(Tone.jsd(freqs, best_weights), 3)}") # \n{piece}
+            # plt.xticks(np.arange(len(lof)),lof)
+            # plt.tight_layout()
+            # plt.savefig(f'img/pieces/{piece[5:-4]}_evaluation.png')
+            # plt.show()
         #
         #
         #     # plot actual distribution (has to be adapted to include duration)
@@ -353,8 +351,8 @@ if __name__ == "__main__":
         #     plt.savefig(f'img/pieces/{piece[5:-4]}_estimate.png')
         #     plt.show()
         #
-        # results = pd.DataFrame(list(zip(JSDs, *list(np.array(best_ps).T), pieces, composers, years)))
-        # results.to_csv(f'results_{len(discount)}.tsv', sep='\t', index=False)
+        results = pd.DataFrame(list(zip(JSDs, *list(np.array(best_ps).T), pieces, composers, years)))
+        results.to_csv(f'results_{len(discount)}.tsv', sep='\t', index=False)
         #
         # fig, ax = plt.subplots()
         # ax.scatter(np.arange(len(JSDs)), JSDs)
