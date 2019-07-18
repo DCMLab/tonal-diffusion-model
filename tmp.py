@@ -132,17 +132,14 @@ class Tone:
             for to_idx in range(n):
                 for mat_idx, step in enumerate(Tone.intervals):
                     if to_idx - from_idx == step:
-                        if len(discount) == 1:
-                            transition_matrices[mat_idx][from_idx, to_idx] = discount[0]
-                        else:
-                            transition_matrices[mat_idx][from_idx, to_idx] = discount[mat_idx]
-
+                        transition_matrices[mat_idx][from_idx, to_idx] = discount
         # diffuse
-        current_dist = init_dist.copy()
+        current_dist = init_dist.copy() * (1 - discount)
         next_dist = np.zeros_like(current_dist)
         intermediate_dists = [current_dist]
         for iteration in range(max_iter):
             np.copyto(next_dist, init_dist)
+            next_dist *= (1 - discount)
             for a_idx, a_prob in enumerate(action_probs):
                 next_dist += a_prob * np.einsum('i,ij->j', current_dist, transition_matrices[a_idx])
             if np.all(np.isclose(current_dist, next_dist, atol=atol)):
@@ -155,9 +152,13 @@ class Tone:
         else:
             if raise_on_max_iter:
                 raise UserWarning(f"Did not converge after {iteration} iterations")
+        norm = next_dist.sum()
+        # check normalization (approximately because of numerical roundoff)
+        np.testing.assert_almost_equal(norm, 1, decimal=2)
         if animate:
             return intermediate_dists
-        return next_dist
+        # return normalized (--> excact) distribution
+        return next_dist / norm
 
     def __init__(self, loc, name, weight=0):
         self.loc = np.array(loc)
