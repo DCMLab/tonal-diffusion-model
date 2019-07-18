@@ -112,7 +112,8 @@ class Tone:
                 raise_on_max_iter=True,
                 animate=False,
                 normalize_action_probs=True,
-                open_boundary=True):
+                open_boundary=True,
+                check_final_normalization=True):
         n = len(tones)
         # initialize init_dist if not provided or convert to numpy array
         if init_dist is None:
@@ -160,7 +161,7 @@ class Tone:
             if raise_on_max_iter:
                 raise UserWarning(f"Did not converge after {iteration} iterations")
         # check for approximate normalization
-        if not open_boundary:
+        if not open_boundary and check_final_normalization:
             norm = next_dist.sum()
             np.testing.assert_almost_equal(norm, 1, decimal=2)
         # normalize (for open boundary and to eliminate roundoff errors)
