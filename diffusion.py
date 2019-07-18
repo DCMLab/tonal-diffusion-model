@@ -112,7 +112,7 @@ class Tone:
                 raise_on_max_iter=True,
                 animate=False,
                 normalize_action_probs=True,
-                open_boundary=False):
+                open_boundary=True):
         n = len(tones)
         # initialize init_dist if not provided or convert to numpy array
         if init_dist is None:
