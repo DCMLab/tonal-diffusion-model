@@ -233,14 +233,14 @@ if __name__ == "__main__":
     # meta = meta[meta.filename.notnull()]
     # path = '..\\ExtendedTonality\\data\\DataFrames\\'
     # csvs = [f for f in glob.glob(path+"*.csv")]
-    pieces = []
-    composers = []
-    years = []
-    for i, row in meta.iterrows():
-        if  (path + row.filename + '.csv' in csvs):
-            pieces.append(path + row.filename + '.csv')
-            composers.append(row.composer)
-            years.append(row.display_year)
+    # pieces = []
+    # composers = []
+    # years = []
+    # for i, row in meta.iterrows():
+    #     if  (path + row.filename + '.csv' in csvs):
+    #         pieces.append(path + row.filename + '.csv')
+    #         composers.append(row.composer)
+    #         years.append(row.display_year)
 
     ### set fixed (initial) discount parameter for all intervals
     discount = .5
@@ -352,8 +352,8 @@ if __name__ == "__main__":
     #     plt.savefig(f'img/pieces/{piece[5:-4]}_estimate.png')
     #     plt.show()
     #
-    results = pd.DataFrame(list(zip(JSDs, *list(np.array(best_ps).T), pieces, composers, years)))
-    results.to_csv(f'results_{len(discount)}.tsv', sep='\t', index=False)
+    # results = pd.DataFrame(list(zip(JSDs, *list(np.array(best_ps).T), pieces, composers, years)))
+    # results.to_csv(f'results_{len(discount)}.tsv', sep='\t', index=False)
     #
     # fig, ax = plt.subplots()
     # ax.scatter(np.arange(len(JSDs)), JSDs)
