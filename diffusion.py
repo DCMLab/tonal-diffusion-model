@@ -107,7 +107,7 @@ class Tone:
                 discount=None,
                 init_dist=None,
                 max_iter=1000,
-                atol=1e-2,
+                atol=1e-10,
                 alpha=1,
                 raise_on_max_iter=True,
                 animate=False,
@@ -238,18 +238,18 @@ if __name__ == "__main__":
     ### Example pieces
     ex_pieces = glob.glob("data/*.csv")
 
-    # meta = pd.read_csv('../ExtendedTonality/metadata.csv', sep='\t', encoding='utf-8')
-    # meta = meta[meta.filename.notnull()]
-    # path = '..\\ExtendedTonality\\data\\DataFrames\\'
-    # csvs = [f for f in glob.glob(path+"*.csv")]
-    # pieces = []
-    # composers = []
-    # years = []
-    # for i, row in meta.iterrows():
-    #     if  (path + row.filename + '.csv' in csvs):
-    #         pieces.append(path + row.filename + '.csv')
-    #         composers.append(row.composer)
-    #         years.append(row.display_year)
+    meta = pd.read_csv('../ExtendedTonality/metadata.csv', sep='\t', encoding='utf-8')
+    meta = meta[meta.filename.notnull()]
+    path = '..\\ExtendedTonality\\data\\DataFrames\\'
+    csvs = [f for f in glob.glob(path+"*.csv")]
+    pieces = []
+    composers = []
+    years = []
+    for i, row in meta.iterrows():
+        if  (path + row.filename + '.csv' in csvs):
+            pieces.append(path + row.filename + '.csv')
+            composers.append(row.composer)
+            years.append(row.display_year)
 
     ### set fixed (initial) discount parameter for all intervals
     discount = .5
@@ -262,14 +262,19 @@ if __name__ == "__main__":
     cons = {'type':'eq', 'fun': con}
 
     def cost_f(x, args):
-        weights = Tone.diffuse(tones=tones, center=center, action_probs=[.1,.1,.1,.1,.1,.1], discount=.5)
-        weights /= weights.sum() ## ???
+        weights = Tone.diffuse(
+                           tones=tones,
+                           center=center,
+                           action_probs=x[:6],
+                           discount=x[6:],
+                           open_boundary=False
+                           )
         return Tone.jsd(weights, args)
 
     JSDs = []
     best_ps = []
-    # for piece in tqdm(pieces): # [ex_pieces[i] for i in [0, 2,11,19]]
-    for piece in [ex_pieces[i] for i in range(3)]:
+    for piece in tqdm(pieces):
+    # for piece in [ex_pieces[i] for i in [0,2,11,19]]:
         freqs, center = Tone.piece_freqs(piece, by_duration=dur)
 
         mini = minimize(
@@ -286,10 +291,8 @@ if __name__ == "__main__":
                                     center=center,
                                     action_probs=best_params[:Tone.i],
                                     discount=best_params[Tone.i:],
-                                    animate=False
-                                    )
+                                    animate=False)
         best_weights = np.array(best_weights)
-        best_weights /= best_weights.sum() ## ???
 
         # for idx, w in enumerate(best_weights):
         #     fig = Tone.plot(tones, center, w)
@@ -307,7 +310,6 @@ if __name__ == "__main__":
         # create video by calling (adjust speed via framerate):
         # ffmpeg -framerate 10 -pattern_type glob -i './animation_*.png' -c:v libx264 -r 30 -pix_fmt yuv420p animation.mp4
         # exit()
-
 
         JSDs.append(Tone.jsd(freqs, best_weights))
         best_ps.append(best_params)
@@ -327,7 +329,7 @@ if __name__ == "__main__":
         # plt.savefig(f'img/pieces/{piece[5:-4]}_best_params.png', dpi=300)
         # plt.show()
 
-    #     # plot both distributions
+        # plot both distributions
         # pd.DataFrame(
         #     {'original':freqs, 'estimate':best_weights}
         #     ).plot(
@@ -337,7 +339,7 @@ if __name__ == "__main__":
         # plt.title(f"JSD: {round(Tone.jsd(freqs, best_weights), 3)}") # \n{piece}
         # plt.xticks(np.arange(len(lof)),lof)
         # plt.tight_layout()
-        # plt.savefig(f'img/pieces/{piece[5:-4]}_evaluation.png')
+        # # plt.savefig(f'img/pieces/{piece[5:-4]}_evaluation.png')
         # plt.show()
     #
     #
@@ -361,8 +363,8 @@ if __name__ == "__main__":
     #     plt.savefig(f'img/pieces/{piece[5:-4]}_estimate.png')
     #     plt.show()
     #
-    # results = pd.DataFrame(list(zip(JSDs, *list(np.array(best_ps).T), pieces, composers, years)))
-    # results.to_csv(f'results_{len(discount)}.tsv', sep='\t', index=False)
+    results = pd.DataFrame(list(zip(JSDs, *list(np.array(best_ps).T), pieces, composers, years)))
+    results.to_csv(f'results_1.tsv', sep='\t', index=False)
     #
     # fig, ax = plt.subplots()
     # ax.scatter(np.arange(len(JSDs)), JSDs)
