@@ -106,7 +106,7 @@ class Tone:
                 action_probs,
                 discount=None,
                 init_dist=None,
-                max_iter=1000,
+                max_iter=10000,
                 atol=1e-10,
                 alpha=1,
                 raise_on_max_iter=True,
@@ -176,6 +176,10 @@ class Tone:
     def get_loc(self, eq_idx=0):
         x, y = self.loc + Tone.eq * eq_idx
         return x * Tone.e_x + y * Tone.e_y
+
+    @staticmethod
+    def kl(p, q):
+        return entropy(p,q, base=2)
 
     @staticmethod
     def jsd(p, q, base=2):
@@ -269,9 +273,10 @@ if __name__ == "__main__":
                            discount=x[6:],
                            open_boundary=False
                            )
-        return Tone.jsd(weights, args)
+        KL = Tone.kl(args, weights)
+        return KL#Tone.jsd(weights, args)
 
-    JSDs = []
+    KLs = []
     best_ps = []
     for piece in tqdm(pieces):
     # for piece in [ex_pieces[i] for i in [0,2,11,19]]:
@@ -279,7 +284,7 @@ if __name__ == "__main__":
 
         mini = minimize(
             fun=cost_f,
-            x0=[1/6] * Tone.i + [discount],
+            x0=[1/6] * Tone.i + [.9],
             args=(freqs),
             method="SLSQP", # Sequential Least SQares Programming
             bounds=bnds,
@@ -311,7 +316,7 @@ if __name__ == "__main__":
         # ffmpeg -framerate 10 -pattern_type glob -i './animation_*.png' -c:v libx264 -r 30 -pix_fmt yuv420p animation.mp4
         # exit()
 
-        JSDs.append(Tone.jsd(freqs, best_weights))
+        KLs.append(Tone.kl(freqs, best_weights))
         best_ps.append(best_params)
 
         ### PLOT
@@ -363,7 +368,7 @@ if __name__ == "__main__":
     #     plt.savefig(f'img/pieces/{piece[5:-4]}_estimate.png')
     #     plt.show()
     #
-    results = pd.DataFrame(list(zip(JSDs, *list(np.array(best_ps).T), pieces, composers, years)))
+    results = pd.DataFrame(list(zip(KLs, *list(np.array(best_ps).T), pieces, composers, years)))
     results.to_csv(f'results_1.tsv', sep='\t', index=False)
     #
     # fig, ax = plt.subplots()
