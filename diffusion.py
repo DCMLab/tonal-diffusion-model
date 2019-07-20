@@ -368,7 +368,8 @@ if __name__ == "__main__":
     #     plt.savefig(f'img/pieces/{piece[5:-4]}_estimate.png')
     #     plt.show()
     #
-    results = pd.DataFrame(list(zip(KLs, *list(np.array(best_ps).T), pieces, composers, years)))
+    columns = ['KLs'] + Tone.int_strings + ['diffusion'] + ['piece', 'composer', 'year']
+    results = pd.DataFrame(list(zip(KLs, *list(np.array(best_ps).T), pieces, composers, years)), columns=columns)
     results.to_csv(f'results_1.tsv', sep='\t', index=False)
     #
     # fig, ax = plt.subplots()

@@ -9,9 +9,11 @@ if __name__=="__main__":
 
     files = [f.split("\\")[-1] for f in glob.glob("data/*.csv")]
 
-    for f in sys.argv[1:]:
+#     for f in sys.argv[1:]:
+    for f in files:
         try:
-            piece = df[df["piece"].str.split("\\").str[-1] ==f]
+            piece = df[df["8"].str.split("\\").str[-1] ==f]
+            print(piece.head())
 
             # read parameter columns
             weights = piece.iloc[:,1:7].iloc[0]
@@ -37,6 +39,7 @@ if __name__=="__main__":
             eps = 10e-4
             for i in range(6):
                 w = weights.iloc[i]
+                # l = decays.iloc[i]
 
                 if (w > eps) & (decay > eps):
                     tikzpicture += f"""
