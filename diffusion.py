@@ -209,6 +209,10 @@ class Tone:
         return x * Tone.e_x + y * Tone.e_y
 
     @staticmethod
+    def kl(p, q):
+        return entropy(p,q, base=2)
+
+    @staticmethod
     def jsd(p, q, base=2):
         ## convert to np.array
         p, q = np.asarray(p), np.asarray(q)
@@ -319,18 +323,25 @@ if __name__ == "__main__":
     cons = {'type':'eq', 'fun': con}
 
     def cost_f(x, args):
-        weights = Tone.diffuse(tones=tones, center=center, action_probs=[.1,.1,.1,.1,.1,.1], lam=.5)
-        weights /= weights.sum() ## ???
-        return Tone.jsd(weights, args)
+        weights = Tone.diffuse(
+                           tones=tones,
+                           center=center,
+                           action_probs=x[:6],
+                           discount=x[6:],
+                           open_boundary=False
+                           )
+        KL = Tone.kl(args, weights)
+        return KL#Tone.jsd(weights, args)
 
-    JSDs = []
+    KLs = []
     best_ps = []
-    for piece in tqdm(pieces[:10]): # [ex_pieces[i] for i in [0, 2,11,19]]
+    for piece in tqdm(pieces):
+    # for piece in [ex_pieces[i] for i in [0,2,11,19]]:
         freqs, center = Tone.piece_freqs(piece, by_duration=dur)
 
         mini = minimize(
             fun=cost_f,
-            x0=[1/6] * Tone.i + [discount],
+            x0=[1/6] * Tone.i + [.9],
             args=(freqs),
             method="SLSQP", # Sequential Least SQares Programming
             bounds=bnds,
@@ -345,7 +356,6 @@ if __name__ == "__main__":
                                     animate=False
                                     )
         best_weights = np.array(best_weights)
-        best_weights /= best_weights.sum() ## ???
 
         # for idx, w in enumerate(best_weights):
         #     fig = Tone.plot(tones, center, w)
@@ -364,26 +374,25 @@ if __name__ == "__main__":
         # ffmpeg -framerate 10 -pattern_type glob -i './animation_*.png' -c:v libx264 -r 30 -pix_fmt yuv420p animation.mp4
         # exit()
 
-
-        JSDs.append(Tone.jsd(freqs, best_weights))
+        KLs.append(Tone.kl(freqs, best_weights))
         best_ps.append(best_params)
 
         ### PLOT
         # plot optimal parameters
 
-        fig, ax = plt.subplots(figsize=(6,6))
-        x = np.arange(best_params[:-6].shape[0])
-        ax.bar(x, best_params[:-6])
-        ds = [round(p,3) for p in best_params[-6:]]
-        plt.xticks(x, [f'{i}\n{ds[j]}' for i, j in zip(Tone.int_strings, range(6))])
-        ax.tick_params(axis='both', which='both', labelsize=14)
-        # plt.title(piece)
-        plt.ylim(0,1)
-        plt.tight_layout()
-        plt.savefig(os.path.join('img', 'pieces', f'{os.path.basename(piece)[:-4]}_best_params.png'), dpi=300)
+        # fig, ax = plt.subplots(figsize=(6,6))
+        # x = np.arange(best_params[:-6].shape[0])
+        # ax.bar(x, best_params[:-6])
+        # ds = [round(p,3) for p in best_params[-6:]]
+        # plt.xticks(x, [f'{i}\n{ds[j]}'  for i, j in zip(Tone.int_strings, range(6))])
+        # ax.tick_params(axis='both', which='both', labelsize=14)
+        # # plt.title(piece)
+        # plt.ylim(0,1)
+        # plt.tight_layout()
+        # plt.savefig(os.path.join('img', 'pieces', f'{os.path.basename(piece)[:-4]}_best_params.png'), dpi=300)
         # plt.show()
 
-    #     # plot both distributions
+        # plot both distributions
         # pd.DataFrame(
         #     {'original':freqs, 'estimate':best_weights}
         #     ).plot(
@@ -393,7 +402,7 @@ if __name__ == "__main__":
         # plt.title(f"JSD: {round(Tone.jsd(freqs, best_weights), 3)}") # \n{piece}
         # plt.xticks(np.arange(len(lof)),lof)
         # plt.tight_layout()
-        # plt.savefig(f'img/pieces/{piece[5:-4]}_evaluation.png')
+        # # plt.savefig(f'img/pieces/{piece[5:-4]}_evaluation.png')
         # plt.show()
     #
     #
@@ -417,8 +426,9 @@ if __name__ == "__main__":
     #     plt.savefig(f'img/pieces/{piece[5:-4]}_estimate.png')
     #     plt.show()
     #
-    # results = pd.DataFrame(list(zip(JSDs, *list(np.array(best_ps).T), pieces, composers, years)))
-    # results.to_csv(f'results_{len(discount)}.tsv', sep='\t', index=False)
+    columns = ['KLs'] + Tone.int_strings + ['diffusion'] + ['piece', 'composer', 'year']
+    results = pd.DataFrame(list(zip(KLs, *list(np.array(best_ps).T), pieces, composers, years)), columns=columns)
+    results.to_csv(f'results_1.tsv', sep='\t', index=False)
     #
     # fig, ax = plt.subplots()
     # ax.scatter(np.arange(len(JSDs)), JSDs)

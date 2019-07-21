@@ -1,0 +1,25 @@
+
+            \documentclass[tikz]{standalone}
+            \begin{document}
+            \begin{tikzpicture}[scale=3.5, ->, >=stealth]
+
+            % the circle
+            \node (origin) at (0,0) [draw,circle,black,fill=white,thick]{};
+            % constant scaling for widths
+            \def\cons{10}
+            
+                    \node (0) at +(0*360/6:0.8112544316616596) {+P5};
+                    \path (origin) edge [line width=\cons*0.2862351267838573] node {} (0);
+                    
+                    \node (1) at +(-1*360/6:0.8112544316616596) {+m3};
+                    \path (origin) edge [line width=\cons*0.06387661973866972] node {} (1);
+                    
+                    \node (3) at +(-3*360/6:0.8112544316616596) {-P5};
+                    \path (origin) edge [line width=\cons*0.5381046187586828] node {} (3);
+                    
+                    \node (4) at +(-4*360/6:0.8112544316616596) {-m3};
+                    \path (origin) edge [line width=\cons*0.11178363471879027] node {} (4);
+                    
+            \end{tikzpicture}
+            \end{document}
+            
