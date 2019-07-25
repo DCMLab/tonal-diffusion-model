@@ -280,8 +280,8 @@ if __name__ == "__main__":
 
     KLs = []
     best_ps = []
-    # for piece in tqdm(pieces):
-    for piece in [ex_pieces[i] for i in [0,2,11,19]]:
+    for piece in tqdm(pieces):
+    # for piece in [ex_pieces[i] for i in [0,2,11,19]]:
         freqs, center = Tone.piece_freqs(piece, by_duration=dur)
 
         mini = minimize(
@@ -321,33 +321,37 @@ if __name__ == "__main__":
         KLs.append(Tone.kl(freqs, best_weights))
         best_ps.append(best_params)
 
+        columns = ['KLs'] + Tone.int_strings + ['diffusion'] + ['piece', 'composer', 'year']
+        results = pd.DataFrame(list(zip(KLs, *list(np.array(best_ps).T), pieces, composers, years)), columns=columns)
+        results.to_csv(f'results.tsv', sep='\t', index=False)
+
         ### PLOT
-        # plot optimal parameters
-
-        fig, ax = plt.subplots(figsize=(6,6))
-        x = np.arange(best_params[:-1].shape[0])
-        ax.bar(x, best_params[:-1])
-        ds = [round(p,3) for p in best_params[-6:]]
-        plt.xticks(x, [f'{i}\n{ds[j]}'  for i, j in zip(Tone.int_strings, range(6))])
-        ax.tick_params(axis='both', which='both', labelsize=14)
-        # plt.title(piece)
-        plt.ylim(0,1)
-        plt.tight_layout()
-        plt.savefig(f'img/pieces/{piece[5:-4]}_best_params.png', dpi=300)
-        plt.show()
-
-        # plot both distributions
-        pd.DataFrame(
-            {'original':freqs, 'estimate':best_weights}
-            ).plot(
-                kind='bar',
-                figsize=(12,6)
-            )
-        plt.title(f"KL: {round(Tone.kl(freqs, best_weights), 3)}") # \n{piece}
-        plt.xticks(np.arange(len(lof)),lof)
-        plt.tight_layout()
-        plt.savefig(f'img/pieces/{piece[5:-4]}_evaluation.png')
-        plt.show()
+        # # plot optimal parameters
+        #
+        # fig, ax = plt.subplots(figsize=(6,6))
+        # x = np.arange(best_params[:-1].shape[0])
+        # ax.bar(x, best_params[:-1])
+        # ds = [round(p,3) for p in best_params[-6:]]
+        # plt.xticks(x, [f'{i}\n{ds[j]}'  for i, j in zip(Tone.int_strings, range(6))])
+        # ax.tick_params(axis='both', which='both', labelsize=14)
+        # # plt.title(piece)
+        # plt.ylim(0,1)
+        # plt.tight_layout()
+        # plt.savefig(f'img/pieces/{piece[5:-4]}_best_params.png', dpi=300)
+        # plt.show()
+        #
+        # # plot both distributions
+        # pd.DataFrame(
+        #     {'original':freqs, 'estimate':best_weights}
+        #     ).plot(
+        #         kind='bar',
+        #         figsize=(12,6)
+        #     )
+        # plt.title(f"KL: {round(Tone.kl(freqs, best_weights), 3)}") # \n{piece}
+        # plt.xticks(np.arange(len(lof)),lof)
+        # plt.tight_layout()
+        # plt.savefig(f'img/pieces/{piece[5:-4]}_evaluation.png')
+        # plt.show()
     #
     #
     #     # plot actual distribution (has to be adapted to include duration)
@@ -370,9 +374,6 @@ if __name__ == "__main__":
     #     plt.savefig(f'img/pieces/{piece[5:-4]}_estimate.png')
     #     plt.show()
     #
-    columns = ['KLs'] + Tone.int_strings + ['diffusion'] + ['piece', 'composer', 'year']
-    results = pd.DataFrame(list(zip(KLs, *list(np.array(best_ps).T), pieces, composers, years)), columns=columns)
-    results.to_csv(f'results_1.tsv', sep='\t', index=False)
     #
     # fig, ax = plt.subplots()
     # ax.scatter(np.arange(len(JSDs)), JSDs)
