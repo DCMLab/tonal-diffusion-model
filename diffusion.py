@@ -108,6 +108,75 @@ class Tone:
     def diffuse(tones,
                 center,
                 action_probs,
+                lam=None,
+                init_dist=None,
+                max_iter=1000,
+                atol=1e-2,
+                alpha=1,
+                raise_on_max_iter=True,
+                animate=False,
+                normalize_action_probs=True,
+                open_boundary=True):
+        n = len(tones)
+        # initialize init_dist if not provided or convert to numpy array
+        if init_dist is None:
+            init_dist = np.zeros(n)
+            for idx, t in enumerate(tones):
+                if t.name == center:
+                    init_dist[idx] = 1.
+        else:
+            init_dist = np.array(init_dist)
+        if not np.isclose(np.sum(init_dist), 1.):
+            raise UserWarning(f"Init dist not normalized (sum={np.sum(init_dist)})")
+
+        # convert action_probs to numpy array
+        action_probs = np.array(action_probs)
+        # normalize
+        if normalize_action_probs:
+            action_probs = action_probs / np.sum(action_probs)
+        # construct transition matrix
+        pi = np.zeros((n, n))
+        for from_idx in range(n):
+            for action_idx, step in enumerate(Tone.intervals):
+                to_idx = from_idx + step
+                if 0 <= to_idx < n:
+                    # step is within bounds
+                    pi[from_idx, to_idx] += action_probs[action_idx]
+                elif not open_boundary:
+                    # step would "leave" tonal range --> action has no effect
+                    pi[from_idx, from_idx] += action_probs[action_idx]
+        if not open_boundary:
+            np.testing.assert_almost_equal(pi.sum(axis=1), 1)
+        # diffuse
+        current_dist = init_dist.copy()
+        next_dist = np.zeros_like(init_dist)
+        intermediate_dists = []
+        for iteration in range(max_iter):
+            next_dist = (1 - lam) * init_dist + lam * np.einsum('ij,i->j', pi, current_dist)
+            if np.all(np.isclose(current_dist, next_dist, atol=atol)):
+                break
+            else:
+                # use new distribution as current for next iteration
+                current_dist = (1 - alpha) * current_dist + alpha * next_dist
+                if animate:
+                    intermediate_dists.append(current_dist)
+        else:
+            if raise_on_max_iter:
+                raise UserWarning(f"Did not converge after {iteration} iterations")
+        # check for approximate normalization
+        if not open_boundary:
+            norm = next_dist.sum()
+            np.testing.assert_almost_equal(norm, 1)
+        # normalize (for open boundary and to eliminate roundoff errors)
+        next_dist /= next_dist.sum()
+        if animate:
+            return intermediate_dists
+        return next_dist
+
+    @staticmethod
+    def diffuse_(tones,
+                center,
+                action_probs,
                 lam,
                 init_dist=None,
                 intervals=None,
