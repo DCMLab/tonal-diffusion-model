@@ -14,5 +14,5 @@ class TestDiffusion(TestCase):
                                  center="C",
                                  atol=1e-2,
                                  action_probs=np.random.uniform(0, 1, 6),
-                                 discount=np.random.uniform(0, 1, 1),
+                                 lam=np.random.uniform(0, 1, 1),
                                  open_boundary=open_boundary)

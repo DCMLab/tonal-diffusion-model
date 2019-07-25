@@ -9,8 +9,10 @@ import subprocess
 
 import numpy as np
 from scipy.optimize import minimize
-from scipy.stats import entropy
+from scipy.stats import entropy, poisson, gamma
 import pandas as pd
+import numbers
+import os
 
 import glob
 from tqdm import tqdm
@@ -57,7 +59,7 @@ class Tone:
     eq = np.array([3, 1])
 
     @staticmethod
-    def plot(tones, center, weights):
+    def plot(tones, center, weights, min_x=-3, max_x=3, min_y=-3, max_y=3):
         weights = np.array(weights)
         weights /= np.max(weights)
 
@@ -65,14 +67,14 @@ class Tone:
 
         fig, ax = plt.subplots(1, 1, figsize=(10, 10))
         center_x, center_y = [t.loc for t in tones if t.name == center][0]
-        x_min = center_x - 3
-        x_max = center_x + 3
-        y_min = center_y - 3
-        y_max = center_y + 3
+        abs_min_x = center_x + min_x
+        abs_max_x = center_x + max_x
+        abs_min_y = center_y + min_y
+        abs_max_y = center_y + max_y
         for t, w in zip(tones, weights):
-            for eq_idx in range(-3, 4):
+            for eq_idx in range(min_y, max_y + 1):
                 loc = t.get_loc(eq_idx)
-                if not (x_min <= loc[0] <= x_max and y_min <= loc[1] <= y_max):
+                if not (abs_min_x <= loc[0] <= abs_max_x and abs_min_y <= loc[1] <= abs_max_y):
                     continue
                 ax.text(*loc,
                         t.name,
@@ -106,16 +108,39 @@ class Tone:
     def diffuse(tones,
                 center,
                 action_probs,
-                discount=None,
+                lam,
                 init_dist=None,
-                max_iter=10000,
+                intervals=None,
+                max_iter=1000,
                 atol=1e-10,
-                alpha=1,
                 raise_on_max_iter=True,
                 animate=False,
                 normalize_action_probs=True,
-                open_boundary=True):
+                open_boundary=True,
+                test_lambda=True,
+                norm_lambda=False,
+                test_normalization=True):
+        # get dimensionality
         n = len(tones)
+        # convert constant numeric value for lambda to callable
+        if isinstance(lam, numbers.Number):
+            assert 0 <= lam < 1, lam
+            def lam_func(k):
+                return (1 - lam) * lam ** k
+        else:
+            lam_func = lam
+        # use normalized array for lambda
+        if norm_lambda:
+            assert np.isfinite(max_iter)
+            lam_arr = np.array([lam_func(k) for k in range(max_iter)], dtype=float)
+            lam_arr /= lam_arr.sum()
+            def lam_func(k):
+                return lam_arr[k]
+        # test lambda if requested
+        if test_lambda:
+            assert np.isfinite(max_iter)
+            lam_seq = np.array([lam_func(k) for k in range(max_iter)])
+            assert np.isclose(lam_seq.sum(), 1), f"lambda not normalized\nsum: {lam_seq.sum()}\nseq: {lam_seq}"
         # initialize init_dist if not provided or convert to numpy array
         if init_dist is None:
             init_dist = np.zeros(n)
@@ -133,9 +158,12 @@ class Tone:
         if normalize_action_probs:
             action_probs = action_probs / np.sum(action_probs)
         # construct transition matrix
+        if intervals is None:
+            intervals = Tone.intervals
+        assert len(action_probs) == len(intervals), (action_probs, intervals)
         pi = np.zeros((n, n))
         for from_idx in range(n):
-            for action_idx, step in enumerate(Tone.intervals):
+            for action_idx, step in enumerate(intervals):
                 to_idx = from_idx + step
                 if 0 <= to_idx < n:
                     # step is within bounds
@@ -146,30 +174,33 @@ class Tone:
         if not open_boundary:
             np.testing.assert_almost_equal(pi.sum(axis=1), 1)
         # diffuse
-        current_dist = init_dist.copy()
-        next_dist = np.zeros_like(init_dist)
+        pt = np.zeros_like(init_dist)
+        ptk = init_dist.copy()
         intermediate_dists = []
-        for iteration in range(max_iter):
-            next_dist = (1 - discount) * init_dist + discount * np.einsum('ij,i->j', pi, current_dist)
-            if np.all(np.isclose(current_dist, next_dist, atol=atol)):
-                break
-            else:
-                # use new distribution as current for next iteration
-                current_dist = (1 - alpha) * current_dist + alpha * next_dist
-                if animate:
-                    intermediate_dists.append(current_dist)
+        for k in range(max_iter):
+            # check for convergence
+            if atol is not None:
+                if np.all(np.isclose(lam_func(k) * ptk, 0, atol=atol)):
+                    break
+            # increment distribution by adding current distribution weighted with lambda
+            pt += lam_func(k) * ptk
+            # update current distribution
+            ptk = np.einsum('ij,i->j', pi, ptk)
+            # add current state of distribution to animation list
+            if animate:
+                intermediate_dists.append(pt.copy())
         else:
-            if raise_on_max_iter:
-                raise UserWarning(f"Did not converge after {iteration} iterations")
+            if raise_on_max_iter and atol is not None:
+                raise UserWarning(f"Did not converge after {k} iterations")
         # check for approximate normalization
-        if not open_boundary:
-            norm = next_dist.sum()
+        if not open_boundary and test_normalization:
+            norm = pt.sum()
             np.testing.assert_almost_equal(norm, 1)
         # normalize (for open boundary and to eliminate roundoff errors)
-        next_dist /= next_dist.sum()
+        pt /= pt.sum()
         if animate:
             return intermediate_dists
-        return next_dist
+        return pt
 
     def __init__(self, loc, name, weight=0):
         self.loc = np.array(loc)
@@ -214,20 +245,45 @@ class Tone:
 
 
 if __name__ == "__main__":
-    #
-    # lof = Tone.get_lof('Fbb', 'B##')
+
+    # lof = Tone.get_lof('Fbbb', 'B###')
     # tones = [Tone((idx, 0), name) for idx, name in enumerate(lof)]
+    # np.random.seed(0)
+    # N = 10
+    # # for idx, (action_probs, lam) in enumerate(zip(np.random.uniform(0, 1, (N, 6)), np.random.uniform(0.5, 0.99, N))):
+    #
     # weights = Tone.diffuse(tones=tones,
     #                        center="C",
-    #                        action_probs=[0, 00, 0, 0, 0, 0],
-    #                        discount=[0.1],
-    #                        # atol=0.1,
-    #                        max_iter=25,
+    #                        # action_probs=action_probs,
+    #                        # lam=lam,
+    #                        action_probs=[1, 1, 0, 0, 0, 0, 1],
+    #                        intervals=list(Tone.intervals) + [0],
+    #                        # lam=0.999,
+    #                        # lam=lambda k: poisson.pmf(k, mu=10),
+    #                        lam=lambda k: gamma.pdf(k, a=10, scale=10),
+    #                        # lam=lambda k: 1 if k == 100 else 0,
+    #                        # lam=lambda k: k/10,
+    #                        # lam=lambda k: 1 if k > 20 else 0,
+    #                        # lam=lambda k: (k/10)**3/(1+np.exp((k-10)/0.1)),
+    #                        # lam=lambda k: np.exp(-((k-5)/1)**2),
+    #                        atol=None,
+    #                        max_iter=1000,
     #                        raise_on_max_iter=False,
-    #                        alpha=1,
-    #                        animate=True)
+    #                        # animate=True,
+    #                        # open_boundary=False,
+    #                        norm_lambda=True,
+    #                        )
+    # fig = Tone.plot(tones, 'C', weights, min_x=-5, max_x=5, min_y=-5, max_y=5)
+    # # fig.tight_layout()
+    # # file_name = f"test_{str(idx).zfill(4)}_.png"
+    # # fig.savefig(file_name)
+    # # plt.close(fig)
+    # plt.show()
+    #
+    # exit()
     # for idx, w in enumerate(weights):
     #     fig = Tone.plot(tones, 'C', w)
+    #     plt.show()
     #     fig.tight_layout()
     #     file_name = f"animation_{str(idx).zfill(4)}.png"
     #     print(f"saving '{file_name}'")
@@ -246,14 +302,15 @@ if __name__ == "__main__":
 
     meta = pd.read_csv('../ExtendedTonality/metadata.csv', sep='\t', encoding='utf-8')
     meta = meta[meta.filename.notnull()]
-    path = '..\\ExtendedTonality\\data\\DataFrames\\'
-    csvs = [f for f in glob.glob(path+"*.csv")]
+    path = os.path.join('..', 'ExtendedTonality', 'data', 'DataFrames')
+    csvs = [f for f in glob.glob(path + os.sep + "*.csv")]
     pieces = []
     composers = []
     years = []
     for i, row in meta.iterrows():
-        if  (path + row.filename + '.csv' in csvs):
-            pieces.append(path + row.filename + '.csv')
+        path_to_csv = os.path.join(path, row.filename + '.csv')
+        if path_to_csv in csvs:
+            pieces.append(path_to_csv)
             composers.append(row.composer)
             years.append(row.display_year)
 
@@ -297,8 +354,9 @@ if __name__ == "__main__":
         best_weights = Tone.diffuse(tones=tones,
                                     center=center,
                                     action_probs=best_params[:Tone.i],
-                                    discount=best_params[Tone.i:],
-                                    animate=False)
+                                    lam=best_params[Tone.i],
+                                    animate=False
+                                    )
         best_weights = np.array(best_weights)
 
         # for idx, w in enumerate(best_weights):
@@ -337,7 +395,7 @@ if __name__ == "__main__":
         # # plt.title(piece)
         # plt.ylim(0,1)
         # plt.tight_layout()
-        # plt.savefig(f'img/pieces/{piece[5:-4]}_best_params.png', dpi=300)
+        # plt.savefig(os.path.join('img', 'pieces', f'{os.path.basename(piece)[:-4]}_best_params.png'), dpi=300)
         # plt.show()
         #
         # # plot both distributions
