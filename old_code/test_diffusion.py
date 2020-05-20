@@ -1,5 +1,5 @@
 from unittest import TestCase
-from diffusion import Tone
+from old_code.diffusion import Tone
 import numpy as np
 
 
