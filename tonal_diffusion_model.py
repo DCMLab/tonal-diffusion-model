@@ -69,8 +69,10 @@ class TonalDiffusionModel(Module):
             to_indices = from_indices + interval_step
             self.transition_matrix[from_indices, to_indices, interval_index] = 1
         self.transition_matrix = torch.from_numpy(self.transition_matrix)
+        # initialise weights
+        self.log_interval_step_weights.data = torch.zeros((self.n_data, self.n_interval_steps))
 
-    def set_weights(self, log_weights):
+    def set_params(self, log_weights):
         assert tuple(log_weights.shape) == (self.n_data, self.n_interval_steps)
         self.log_interval_step_weights.data = torch.from_numpy(log_weights)
         self.zero_grad()
@@ -153,7 +155,7 @@ class TonalDiffusionModel(Module):
         return self.reference_center - self.matched_shift
 
     def loss(self, log_weights, grad=False):
-        self.set_weights(log_weights=log_weights.reshape((self.n_data, self.n_interval_steps)))
+        self.set_params(log_weights=log_weights.reshape((self.n_data, self.n_interval_steps)))
         self.perform_diffusion()
         self.match_distributions()
         if grad:
@@ -177,6 +179,110 @@ class TonalDiffusionModel(Module):
         self.iteration += 1
         print(f"iteration {self.iteration}")
         print(f"    loss: {self.loss(log_weights=log_weights)}")
+
+
+class StaticDistributionModel(Module):
+
+    def __init__(self,
+                 margin=0.5,
+                 max_iterations=1000):
+        super().__init__()
+        self.margin = margin
+        self.max_iterations = max_iterations
+        self.n_data = None
+        self.n_interval_classes = None
+        self.n_dist_support = None
+        self.reference_center = None
+        self.static_interval_log_distribution = Parameter(torch.tensor([]))
+        self.interval_class_distribution = None
+        self.init_interval_class_distribution = None
+        self.transition_matrix = None
+        self.log_data = None
+        self.matched_log_dist = None
+        self.matched_loss = None
+        self.matched_shift = None
+        self.iteration = 0
+
+    def set_data(self, pitch_class_distributions):
+        self.iteration = 0
+        self.log_data = torch.from_numpy(np.log(pitch_class_distributions))
+        self.n_data, self.n_interval_classes = pitch_class_distributions.shape
+        # get necessary support of distribution, reference center, and minimum number of iterations to reach every point
+        self.n_dist_support = int(np.ceil((2 * self.margin + 1) * self.n_interval_classes))
+        self.reference_center = int(np.round((self.margin + 0.5) * self.n_interval_classes))
+        # initialise distribution with mode at reference center
+        self.static_interval_log_distribution.data = torch.from_numpy(
+            -((np.arange(self.n_dist_support) - self.reference_center) / self.n_dist_support * 5) ** 2
+        )
+
+    def set_params(self, log_dist):
+        assert tuple(log_dist.shape) == (self.n_dist_support,)
+        self.static_interval_log_distribution.data = torch.from_numpy(log_dist)
+        self.zero_grad()
+
+    @staticmethod
+    def dkl_log(log_p, log_q, dim=None):
+        zeros = torch.zeros_like(log_p)
+        dkl = torch.where(torch.isfinite(log_p),
+                          log_p.exp() * (log_p - log_q),
+                          zeros).sum(dim=dim)
+        if not np.all(torch.isfinite(dkl).data.numpy()):
+            print(dkl)
+            raise RuntimeWarning("Got non-finite (inf/nan)")
+        return dkl
+
+    def match_distributions(self):
+        n_shifts = self.n_dist_support - self.n_interval_classes + 1
+        self.matched_log_dist = None
+        self.matched_loss = None
+        self.matched_shift = np.zeros(self.n_data, dtype=int)
+        for shift in range(n_shifts):
+            log_dist = self.static_interval_log_distribution[None, shift:shift + self.n_interval_classes]
+            log_dist = log_dist - log_dist.logsumexp(dim=1, keepdim=True)
+            loss = self.dkl_log(self.log_data, log_dist, dim=1)
+            if shift == 0:
+                self.matched_log_dist = log_dist
+                self.matched_loss = loss
+            else:
+                cond = loss < self.matched_loss
+                self.matched_log_dist = torch.where(cond[:, None], log_dist, self.matched_log_dist)
+                self.matched_loss = torch.where(cond, loss, self.matched_loss)
+                self.matched_shift = np.where(cond, shift, self.matched_shift)
+
+    def get_distributions(self):
+        self.match_distributions()
+        return self.matched_log_dist.exp().data.numpy().copy()
+
+    def get_loss(self):
+        return self.matched_loss.data.numpy().copy()
+
+    def get_centers(self):
+        return self.reference_center - self.matched_shift
+
+    def loss(self, log_dist, grad=False):
+        self.set_params(log_dist=log_dist)
+        self.match_distributions()
+        if grad:
+            loss = self.matched_loss.mean()
+            loss.backward()
+            _grad = self.static_interval_log_distribution.grad.data.numpy()
+            if np.any(np.isnan(_grad)):
+                print(_grad)
+                raise RuntimeWarning("got nan")
+            return loss.data.numpy(), _grad
+        else:
+            with torch.no_grad():
+                loss = self.matched_loss.mean()
+                return loss.data.numpy()
+
+    def grad(self, log_dist):
+        loss, grad = self.loss(log_dist=log_dist, grad=True)
+        return grad.flatten()
+
+    def callback(self, log_dist):
+        self.iteration += 1
+        print(f"iteration {self.iteration}")
+        print(f"    loss: {self.loss(log_dist=log_dist)}")
 
 
 class GaussianModel:

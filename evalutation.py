@@ -2,7 +2,7 @@ import numpy as np
 from scipy.optimize import minimize
 import matplotlib.pyplot as plt
 
-from tonal_diffusion_model import TonalDiffusionModel, GaussianModel
+from tonal_diffusion_model import TonalDiffusionModel, GaussianModel, StaticDistributionModel
 
 if __name__ == "__main__":
     # fix random seed
@@ -16,24 +16,33 @@ if __name__ == "__main__":
     data /= data.sum(axis=1, keepdims=True)
 
     # set up models
-    model = TonalDiffusionModel()
-    baseline = GaussianModel()
-    model.set_data(data)
-    baseline.set_data(data)
+    diffusion_model = TonalDiffusionModel()
+    static_model = StaticDistributionModel()
+    gaussian_model = GaussianModel()
+    # set data
+    diffusion_model.set_data(data)
+    static_model.set_data(data)
+    gaussian_model.set_data(data)
 
     # optimise parameters
-    ret = minimize(fun=model.loss,
-                   jac=model.grad,
-                   x0=np.zeros(model.n_data * model.n_interval_steps),
-                   method='L-BFGS-B',
-                   tol=1e-5,
-                   # tol=1e1,
-                   callback=model.callback)
-    print(ret)
+    # for model, n_params in [(diffusion_model, diffusion_model.n_data * diffusion_model.n_interval_steps),
+    #                         (static_model, static_model.n_dist_support)]:
+    for model, params in [(diffusion_model, diffusion_model.log_interval_step_weights.data.numpy()),
+                          (static_model, static_model.static_interval_log_distribution.data.numpy())]:
+        ret = minimize(fun=model.loss,
+                       jac=model.grad,
+                       # x0=np.zeros(n_params),
+                       x0=params,
+                       method='L-BFGS-B',
+                       tol=1e-5,
+                       # tol=1e-2,
+                       # tol=1e1,
+                       callback=model.callback)
+        print(ret)
 
     # set up plot
-    n_plots = 3
-    fig, axes = plt.subplots(1, n_plots, figsize=(n_plots * 7, 5))
+    n_plots = 4
+    fig, axes = plt.subplots(1, n_plots, figsize=(n_plots * 5, 5))
 
     # plot data
     ax = axes[0]
@@ -42,12 +51,15 @@ if __name__ == "__main__":
     ax.legend()
 
     # plot model
-    for ax, mod in [(axes[1], model), (axes[2], baseline)]:
+    for ax, mod, name in [(axes[1], diffusion_model, "Diffusion Model"),
+                          (axes[2], static_model, "Static Model"),
+                          (axes[3], gaussian_model, "Gaussian Model")]:
         dist = mod.get_distributions()
         loss = mod.get_loss()
         centers = mod.get_centers()
         for d, l, c in zip(dist, loss, centers):
             ax.plot(d, '-o', label=f"{round(c, 1)} | {np.format_float_scientific(l, 2)}")
         ax.legend()
+        ax.set_title(name)
 
     plt.show()
