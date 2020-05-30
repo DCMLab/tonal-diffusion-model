@@ -2,6 +2,7 @@ import numpy as np
 import torch
 from torch.nn import Module, Parameter
 from torch.distributions.poisson import Poisson
+from torch.distributions.geometric import Geometric
 
 
 class TonalDiffusionModel(Module):
@@ -70,20 +71,32 @@ class TonalDiffusionModel(Module):
             self.transition_matrix[from_indices, to_indices, interval_index] = 1
         self.transition_matrix = torch.from_numpy(self.transition_matrix)
         # initialise weights
-        self.log_interval_step_weights.data = torch.zeros((self.n_data, self.n_interval_steps))
+        self.log_interval_step_weights.data = torch.zeros((self.n_data, self.n_interval_steps), dtype=torch.float64)
 
     def set_params(self, log_weights):
         assert tuple(log_weights.shape) == (self.n_data, self.n_interval_steps)
         self.log_interval_step_weights.data = torch.from_numpy(log_weights)
         self.zero_grad()
 
+    def get_params(self):
+        return self.log_interval_step_weights.data.numpy().copy()
+
+    def get_interpretable_params(self):
+        weight_sum = self.log_interval_step_weights.exp().sum(dim=1).data.numpy()
+        weights = self.log_interval_step_weights.exp().data.numpy() / weight_sum[:, None]
+        params = np.zeros((weights.shape[0], weights.shape[1] + 1))
+        params[:, 0] = weight_sum
+        params[:, 1:] = weights
+        return params
+
     def perform_diffusion(self):
         # create path length distributions and cumulative sum to track convergence
-        lam = self.log_interval_step_weights.exp().sum(dim=1)
-        path_length_dist = Poisson(rate=lam)
-        cum_path_length_prob = torch.zeros_like(lam)
+        weight_sum = self.log_interval_step_weights.exp().sum(dim=1)
+        path_length_dist = Poisson(rate=weight_sum)
+        # path_length_dist = Geometric(probs=weight_sum.log().sigmoid())
+        cum_path_length_prob = torch.zeros_like(weight_sum)
         # get interval step probabilities
-        interval_step_probs = self.log_interval_step_weights.exp() / lam[:, None]
+        interval_step_probs = self.log_interval_step_weights.exp() / weight_sum[:, None]
         # initialise running and output distributions
         running_interval_class_distribution = self.init_interval_class_distribution
         self.interval_class_distribution = torch.zeros_like(self.init_interval_class_distribution)
@@ -175,6 +188,14 @@ class TonalDiffusionModel(Module):
         loss, grad = self.loss(log_weights=log_weights, grad=True)
         return grad.flatten()
 
+    def closure(self):
+        self.zero_grad()
+        self.perform_diffusion()
+        self.match_distributions()
+        loss = self.matched_loss.mean()
+        loss.backward()
+        return loss
+
     def callback(self, log_weights):
         self.iteration += 1
         print(f"iteration {self.iteration}")
@@ -219,6 +240,12 @@ class StaticDistributionModel(Module):
         assert tuple(log_dist.shape) == (self.n_dist_support,)
         self.static_interval_log_distribution.data = torch.from_numpy(log_dist)
         self.zero_grad()
+
+    def get_params(self):
+        return self.static_interval_log_distribution.data.numpy().copy()
+
+    def get_interpretable_params(self):
+        return [[] for _ in range(self.n_data)]
 
     @staticmethod
     def dkl_log(log_p, log_q, dim=None):
@@ -279,6 +306,13 @@ class StaticDistributionModel(Module):
         loss, grad = self.loss(log_dist=log_dist, grad=True)
         return grad.flatten()
 
+    def closure(self):
+        self.zero_grad()
+        self.match_distributions()
+        loss = self.matched_loss.mean()
+        loss.backward()
+        return loss
+
     def callback(self, log_dist):
         self.iteration += 1
         print(f"iteration {self.iteration}")
@@ -313,3 +347,6 @@ class GaussianModel:
 
     def get_centers(self):
         return self.mean.copy()
+
+    def get_interpretable_params(self):
+        return np.sqrt(self.var)[:, None]
