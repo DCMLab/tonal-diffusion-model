@@ -117,7 +117,9 @@ class TonnetzModel(IntervalClassModel):
                          4,   # major third up
                          -4   # major third down
                  ),
-                 margin=0.5):
+                 margin=0.5,
+                 *args,
+                 **kwargs):
         super().__init__()
         self.interval_steps = np.array(interval_steps)
         self.n_interval_steps = len(interval_steps)
@@ -180,39 +182,15 @@ class TonnetzModel(IntervalClassModel):
                 self.reference_center - self.matched_shift)
 
 
-class TonalDiffusionModel(TonnetzModel):
+class DiffusionModel(TonnetzModel):
 
-    def __init__(self,
-                 min_iterations=None,
-                 max_iterations=100,
-                 separate_path_params=True,
-                 precompute_path_dist=False,
-                 *args,
-                 **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.max_iterations = max_iterations
-        self.min_iterations = min_iterations
-        self.effective_min_iterations = None
-        self.log_interval_step_weights = Parameter(torch.tensor([]))
-        self.separate_path_params = separate_path_params
-        self.precompute_path_dist = precompute_path_dist
-        if self.separate_path_params:
-            self.path_log_params = Parameter(torch.tensor([]))
         self.init_interval_class_distribution = None
         self.transition_matrix = None
 
     def set_data(self, *args, **kwargs):
         super().set_data(*args, **kwargs)
-        # set minimum number of iterations to reach every point
-        if self.min_iterations is None:
-            largest_step_down = -min(np.min(self.interval_steps), 0)
-            largest_step_up = max(np.max(self.interval_steps), 0)
-            self.effective_min_iterations = int(np.ceil(max(
-                self.reference_center / largest_step_down,
-                (self.n_dist_support - self.reference_center) / largest_step_up
-            ))) + 1
-        else:
-            self.effective_min_iterations = self.min_iterations
         # initialise interval class distributions with single tonal center
         self.init_interval_class_distribution = np.zeros((self.n_data, self.n_dist_support))
         self.init_interval_class_distribution[:, self.reference_center] = 1
@@ -227,60 +205,114 @@ class TonalDiffusionModel(TonnetzModel):
             to_indices = from_indices + interval_step
             self.transition_matrix[from_indices, to_indices, interval_index] = 1
         self.transition_matrix = torch.from_numpy(self.transition_matrix)
+
+    def get_interpretable_params(self):
+        raise NotImplementedError
+
+    def perform_diffusion(self):
+        raise NotImplementedError
+
+    def _loss(self):
+        self.perform_diffusion()
+        return super()._loss()
+
+
+class TonalDiffusionModel(DiffusionModel):
+
+    def __init__(self,
+                 min_iterations=None,
+                 max_iterations=100,
+                 path_dist=Binomial,
+                 *args,
+                 **kwargs):
+        super().__init__(*args, **kwargs)
+        self.max_iterations = max_iterations
+        self.min_iterations = min_iterations
+        self.effective_min_iterations = None
+        self.log_interval_step_weights = Parameter(torch.tensor([]))
+        self.path_log_params = Parameter(torch.tensor([]))
+        self.path_dist = path_dist
+        if path_dist == Gamma:
+            self.precompute_path_dist = True
+        else:
+            self.precompute_path_dist = False
+
+    def set_data(self, *args, **kwargs):
+        super().set_data(*args, **kwargs)
+        # set minimum number of iterations to reach every point
+        if self.min_iterations is None:
+            largest_step_down = -min(np.min(self.interval_steps), 0)
+            largest_step_up = max(np.max(self.interval_steps), 0)
+            self.effective_min_iterations = int(np.ceil(max(
+                self.reference_center / largest_step_down,
+                (self.n_dist_support - self.reference_center) / largest_step_up
+            ))) + 1
+        else:
+            self.effective_min_iterations = self.min_iterations
         # initialise weights
         self.log_interval_step_weights.data = torch.zeros((self.n_data, self.n_interval_steps), dtype=torch.float64)
-        if self.separate_path_params:
-            # initialise distribution parameters
-            self.path_log_params.data = torch.ones((self.n_data, 2), dtype=torch.float64) * np.log(self.n_dist_support)
-            # self.path_log_params.data = torch.ones((self.n_data, 1), dtype=torch.float64) * np.log(self.n_dist_support)
+        # initialise distribution parameters
+        if self.path_dist in [Poisson, Geometric]:
+            self.path_log_params.data = torch.zeros(self.n_data, dtype=torch.float64)
+        elif self.path_dist in [Gamma, Binomial]:
+             params = np.ones((self.n_data, 2), dtype=np.float64)
+             params[:, 0] *= 2
+             params[:, 1] *= -2
+             self.path_log_params.data = torch.from_numpy(params)
+        else:
+            raise RuntimeWarning("Failed Case")
 
     def get_interpretable_params(self):
         weight_sum = self.log_interval_step_weights.exp().sum(dim=1).data.numpy()
         weights = self.log_interval_step_weights.exp().data.numpy() / weight_sum[:, None]
-        if self.separate_path_params:
-            params = np.zeros((weights.shape[0], weights.shape[1] + self.path_log_params.shape[1]))
-            params[:, :weights.shape[1]] = weights
-            params[:, -self.path_log_params.shape[1]:] = self.path_log_params.data.numpy()
-        else:
-            params = np.zeros((weights.shape[0], weights.shape[1] + 1))
-            params[:, :weights.shape[1]] = weights
-            params[:, -1] = weight_sum
+        # # separate_path_params:
+        #     params = np.zeros((weights.shape[0], weights.shape[1] + self.path_log_params.shape[1]))
+        #     params[:, :weights.shape[1]] = weights
+        #     params[:, -self.path_log_params.shape[1]:] = self.path_log_params.data.numpy()
+        params = np.zeros((weights.shape[0], weights.shape[1] + 1))
+        params[:, :weights.shape[1]] = weights
+        params[:, -1] = weight_sum
         return params
 
     def perform_diffusion(self):
-        # create path length distributions and cumulative sum to track convergence
-        log_weight_sum = self.log_interval_step_weights.logsumexp(dim=1)
-
         # float offset to n (hack e.g. for Gamma, which is not defined for n=0)
-        n_offset = 0
+        if self.path_dist == Gamma:
+            n_offset = 1e-50
+        else:
+            n_offset = 0
         # uniform offset of probability distribution to ensure finite KL divergence if model produces strict zero
         # probabilities for some pitch classes otherwise (e.g. for Binomial)
-        epsilon = 0
-        ## path length distribution
-        ## Poisson
-        # path_length_dist = Poisson(rate=log_weight_sum.exp())
-        ## Geometric
-        # path_length_dist = Geometric(probs=log_weight_sum.sigmoid())
-        ## Gamma
-        # path_length_dist = Gamma(concentration=self.path_log_params.exp()[:, 0], rate=self.path_log_params.exp()[:, 1])
-        # n_offset = 1e-50
-        ## Binomial
-        epsilon = 1e-50
-        total_count = self.path_log_params[:, 0].exp()
-        total_count_floor = total_count.floor()
-        total_count_ceil = total_count.ceil()
-        alpha = total_count - total_count_floor
-        probs = self.path_log_params[:, 1].sigmoid()
-        floor_bin = Binomial(total_count=total_count_floor, probs=probs)
-        ceil_bin = Binomial(total_count=total_count_ceil, probs=probs)
-        ## callable
-        def path_length_dist_func(n):
-            return alpha * ceil_bin.log_prob(n).exp() + (1 - alpha) * floor_bin.log_prob(n).exp()
-        # def path_length_dist_func(n):
-        #     return path_length_dist.log_prob(n).exp()
-
+        if self.path_dist == Binomial:
+            epsilon = 1e-50
+        else:
+            epsilon = 0
+        # path length distribution
+        if self.path_dist == Poisson:
+            path_length_dist = Poisson(rate=self.path_log_params.exp())
+        elif self.path_dist == Geometric:
+            path_length_dist = Geometric(probs=self.path_log_params.sigmoid())
+        elif self.path_dist == Gamma:
+            path_length_dist = Gamma(concentration=self.path_log_params[:, 0].exp(),
+                                     rate=self.path_log_params[:, 1].exp())
+        elif self.path_dist == Binomial:
+            total_count = self.path_log_params[:, 0].exp()
+            total_count_floor = total_count.floor()
+            total_count_ceil = total_count.ceil()
+            alpha = total_count - total_count_floor
+            probs = self.path_log_params[:, 1].sigmoid()
+            floor_bin = Binomial(total_count=total_count_floor, probs=probs)
+            ceil_bin = Binomial(total_count=total_count_ceil, probs=probs)
+        else:
+            raise RuntimeWarning("Failed Case")
+        # callable
+        if self.path_dist == Binomial:
+            def path_length_dist_func(n):
+                return alpha * ceil_bin.log_prob(n).exp() + (1 - alpha) * floor_bin.log_prob(n).exp()
+        else:
+            def path_length_dist_func(n):
+                return path_length_dist.log_prob(n).exp()
         # normalise path length distribution
-        if self.precompute_path_dist:
+        if self.path_dist == Gamma:
             l = []
             for n in range(self.max_iterations):
                 n = torch.tensor([n + n_offset], dtype=torch.float64)
@@ -289,18 +321,18 @@ class TonalDiffusionModel(TonnetzModel):
             normalisation = path_length_dist_arr.sum(dim=0, keepdim=True)
             assert not np.any(np.isclose(normalisation.data.numpy(), 0)), normalisation.data.numpy().tolist()
             path_length_dist_arr = path_length_dist_arr / normalisation
-        else:
-            path_length_dist_arr = None
-        cum_path_length_prob = torch.zeros_like(log_weight_sum)
+        # cumulative sum to track convergence
+        cum_path_length_prob = torch.zeros(self.n_data, dtype=torch.float64)
         # get interval step probabilities
-        interval_step_log_probs = self.log_interval_step_weights - log_weight_sum[:, None]
+        interval_step_log_probs = self.log_interval_step_weights - \
+                                  self.log_interval_step_weights.logsumexp(dim=1, keepdim=True)
         # initialise running and output distributions
         running_interval_class_distribution = self.init_interval_class_distribution
         self.interval_class_distribution = torch.zeros_like(self.init_interval_class_distribution)
         # marginalise latent variable
         for n in range(self.max_iterations):
             # probability to reach this step
-            if self.precompute_path_dist:
+            if self.path_dist == Gamma:
                 step_prob = path_length_dist_arr[n]
             else:
                 step_prob = path_length_dist_func(torch.tensor(n, dtype=torch.float64))
@@ -333,9 +365,95 @@ class TonalDiffusionModel(TonnetzModel):
             print(self.interval_class_distribution)
             raise RuntimeWarning("got nan")
 
-    def _loss(self):
-        self.perform_diffusion()
-        return super()._loss()
+
+class FactorModel(DiffusionModel):
+
+    def __init__(self,
+                 max_iterations=100,
+                 path_dist=Poisson,
+                 *args,
+                 **kwargs):
+        super().__init__(*args, **kwargs)
+        self.max_iterations = max_iterations
+        self.path_dist = path_dist
+        self.dist_log_params = Parameter(torch.tensor([]))
+
+    def set_data(self, *args, **kwargs):
+        super().set_data(*args, **kwargs)
+        # initialise parameters
+        if self.path_dist == Poisson:
+            self.dist_log_params.data = torch.zeros((self.n_data, self.n_interval_steps), dtype=torch.float64)
+        else:
+            self.dist_log_params.data = torch.ones((self.n_data,
+                                                    self.n_interval_steps,
+                                                    2), dtype=torch.float64)
+
+    def get_interpretable_params(self):
+        return self.dist_log_params.exp().data.numpy().reshape(self.dist_log_params.shape[0], -1).copy()
+
+    def perform_diffusion(self):
+        # initialise distribution
+        new_interval_class_distribution = self.init_interval_class_distribution
+        # ensure finite DKL
+        epsilon = 1e-50
+        # apply different interval steps successively
+        for interval_idx, step_length in enumerate(self.interval_steps):
+            # path length distribution
+            if self.path_dist == Poisson:
+                path_length_dist = Poisson(rate=self.dist_log_params[:, interval_idx].exp())
+                def path_length_dist_func(n):
+                    return path_length_dist.log_prob(n).exp()
+            elif self.path_dist == Binomial:
+                total_count = self.dist_log_params[:, interval_idx, 0].exp()
+                total_count_floor = total_count.floor()
+                total_count_ceil = total_count.ceil()
+                alpha = total_count - total_count_floor
+                probs = self.dist_log_params[:, interval_idx, 1].sigmoid()
+                floor_bin = Binomial(total_count=total_count_floor, probs=probs)
+                ceil_bin = Binomial(total_count=total_count_ceil, probs=probs)
+                def path_length_dist_func(n):
+                    return alpha * ceil_bin.log_prob(n).exp() + (1 - alpha) * floor_bin.log_prob(n).exp()
+            else:
+                raise RuntimeWarning("Failed Case")
+            # cumulative probability weight for termination condition
+            cum_path_length_prob = torch.zeros(self.n_data, dtype=torch.float64)
+            # marginalise latent variable
+            for n in range(self.max_iterations):
+                # probability to reach this step
+                step_prob = path_length_dist_func(torch.tensor(n, dtype=torch.float64))
+                # which values are within bounds for original and shifted distribution
+                if n == 0:
+                    # new dist for accumulation
+                    old_interval_class_distribution = new_interval_class_distribution
+                    new_interval_class_distribution = step_prob[:, None] * old_interval_class_distribution
+                else:
+                    if step_length > 0:
+                        orig_slice = slice(n * step_length, None)
+                        shifted_slice = slice(None, -n * step_length)
+                    else:
+                        orig_slice = slice(None, n * step_length)
+                        shifted_slice = slice(-n * step_length, None)
+                    # update output distributions (marginalise path length)
+                    new_interval_class_distribution[:, orig_slice] = \
+                        new_interval_class_distribution[:, orig_slice] + \
+                        step_prob[:, None] * old_interval_class_distribution[:, shifted_slice]
+                # update cumulative
+                cum_path_length_prob = cum_path_length_prob + step_prob
+                if np.allclose(cum_path_length_prob.data.numpy(), 1):
+                    print(f"break after {n+1} iterations")
+                    break
+            else:
+                with np.printoptions(threshold=np.inf):
+                    print(f"cum_path_length_prob: {cum_path_length_prob.data.numpy()}")
+                    print(f"params: {self.get_params()}")
+                raise RuntimeWarning(f"maximum number of iterations ({self.max_iterations}) reached")
+        self.interval_class_distribution = new_interval_class_distribution + epsilon
+        # normalise to account for border effects and path length cut-off
+        self.interval_class_distribution = self.interval_class_distribution / \
+                                           self.interval_class_distribution.sum(dim=1, keepdim=True)
+        if np.any(np.isnan(self.interval_class_distribution.data.numpy())):
+            print(self.interval_class_distribution)
+            raise RuntimeWarning("got nan")
 
 
 class StaticDistributionModel(TonnetzModel):
