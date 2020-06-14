@@ -118,6 +118,8 @@ class TonnetzModel(IntervalClassModel):
                          -4   # major third down
                  ),
                  margin=0.5,
+                 latent_shape=(),
+                 soft_max_posterior=False,
                  *args,
                  **kwargs):
         super().__init__()
@@ -127,48 +129,99 @@ class TonnetzModel(IntervalClassModel):
         self.n_data = None
         self.n_interval_classes = None
         self.n_dist_support = None
+        self.latent_shape = latent_shape
+        self.soft_max_posterior = soft_max_posterior
         self.reference_center = None
         self.interval_class_distribution = None
         self.data = None
         self.matched_dist = None
         self.matched_loss = None
         self.matched_shift = None
+        self.matched_latent = None
         self.data_weights = None
+        self.neg_log_likes = None
+        if self.soft_max_posterior:
+            self.beta = Parameter(torch.tensor([]))
 
     def _loss(self):
         self.match_distributions()
-        if self.data_weights is None:
-            return self.matched_loss.mean()
+        if self.soft_max_posterior:
+            # compute posterior of latent variables
+            latent_dims = tuple(range(1, len(self.neg_log_likes.shape)))  # including transposition/shift!
+            latent_log_posterior = -self.neg_log_likes * self.beta
+            latent_log_posterior = latent_log_posterior - latent_log_posterior.logsumexp(dim=latent_dims, keepdim=True)
+            # compute marginal neg-log-likelihood (per piece)
+            neg_log_like = -(-self.neg_log_likes + latent_log_posterior).logsumexp(dim=latent_dims)
         else:
-            return (self.matched_loss * self.data_weights).sum()
+            data_slice = np.array(list(range(self.n_data)))
+            if self.matched_latent is None:
+                neg_log_like = self.neg_log_likes[data_slice, self.matched_shift]
+            else:
+                neg_log_like = self.neg_log_likes[(data_slice, self.matched_shift) + tuple(self.matched_latent)]
+        if self.data_weights is None:
+            return neg_log_like.mean()
+        else:
+            return (neg_log_like * self.data_weights).sum()
 
     def set_data(self, *args, **kwargs):
         super().set_data(*args, **kwargs)
         # get necessary support of distribution and reference center
         self.n_dist_support = int(np.ceil((2 * self.margin + 1) * self.n_interval_classes))
         self.reference_center = int(np.round((self.margin + 0.5) * self.n_interval_classes))
+        if self.soft_max_posterior:
+            self.beta.data = torch.tensor([1.])
 
     def get_interpretable_params(self):
-        raise NotImplementedError
+        d = dict(
+            # loss=self.matched_loss.data.numpy().copy(),
+            shift=self.matched_shift
+        )
+        if self.soft_max_posterior:
+            d = dict(**d, beta=[self.beta.data.numpy()[0] for _ in range(self.n_data)])
+        if self.matched_latent is not None:
+            d = dict(**d, **{f"latent_{idx+1}": latent for idx, latent in enumerate(self.matched_latent)})
+        return d
+
 
     def match_distributions(self):
-        """
-        Compute the MAP estimate for the latent transposition parameter by finding the optimal match
-        """
         n_shifts = self.n_dist_support - self.n_interval_classes + 1
+        self.neg_log_likes = torch.zeros((self.n_data, n_shifts) + self.latent_shape, dtype=torch.float64)
+        all_data_indices = np.arange(self.n_data)
+        latent_none = tuple(None for _ in self.latent_shape)
+        latent_slice = tuple(slice(None) for _ in self.latent_shape)
+        # latent_dims = tuple(range(1, len(self.neg_log_likes.shape)))  # for matching after DKL
         for shift in range(n_shifts):
-            dist = self.interval_class_distribution[:, shift:shift + self.n_interval_classes]
+            # keep profile dimension
+            dist = self.interval_class_distribution[(slice(None),
+                                                     slice(shift, shift + self.n_interval_classes)) +
+                                                    latent_slice]
             dist = dist / dist.sum(dim=1, keepdim=True)
-            loss = self.dkl(self.data, dist, dim=1)
-            if shift == 0:
-                self.matched_dist = dist
-                self.matched_loss = loss
-                self.matched_shift = np.zeros(self.n_data, dtype=int)
+            # neg-log-likelihoods for all profiles (and all data as in parent function)
+            nll = self.dkl(self.data[(slice(None), slice(None)) + latent_none], dist, dim=1)
+            self.neg_log_likes[(slice(None), shift) + latent_slice] = nll
+            if self.latent_shape:
+                matched_latent = np.unravel_index(
+                    np.argmin(nll.data.numpy().reshape(self.n_data, -1), axis=1),
+                    self.latent_shape
+                )
+                matched_dist = dist[(0, slice(None)) + matched_latent].transpose(0, 1)
             else:
-                cond = loss < self.matched_loss
-                self.matched_dist = torch.where(cond[:, None], dist, self.matched_dist)
-                self.matched_loss = torch.where(cond, loss, self.matched_loss)
+                matched_latent = ()
+                matched_dist = dist
+            matched_data_indices = (all_data_indices,) + matched_latent
+            if shift == 0:
+                self.matched_dist = matched_dist
+                self.matched_loss = nll[matched_data_indices]
+                self.matched_shift = np.zeros(self.n_data, dtype=int)
+                if self.latent_shape:
+                    self.matched_latent = matched_latent
+            else:
+                cond = nll[matched_data_indices] < self.matched_loss
+                self.matched_dist = torch.where(cond[:, None], matched_dist, self.matched_dist)
+                self.matched_loss = torch.where(cond, nll[matched_data_indices], self.matched_loss)
                 self.matched_shift = np.where(cond, shift, self.matched_shift)
+                if self.latent_shape:
+                    self.matched_latent = np.where(cond, matched_latent, self.matched_latent)
 
     def get_results(self):
         """
@@ -206,9 +259,6 @@ class DiffusionModel(TonnetzModel):
             to_indices = from_indices + interval_step
             self.transition_matrix[from_indices, to_indices, interval_index] = 1
         self.transition_matrix = torch.from_numpy(self.transition_matrix)
-
-    def get_interpretable_params(self):
-        raise NotImplementedError
 
     def perform_diffusion(self):
         raise NotImplementedError
@@ -264,16 +314,24 @@ class TonalDiffusionModel(DiffusionModel):
             raise RuntimeWarning("Failed Case")
 
     def get_interpretable_params(self):
+        d = super().get_interpretable_params()
         weight_sum = self.log_interval_step_weights.exp().sum(dim=1).data.numpy()
         weights = self.log_interval_step_weights.exp().data.numpy() / weight_sum[:, None]
-        # # separate_path_params:
-        #     params = np.zeros((weights.shape[0], weights.shape[1] + self.path_log_params.shape[1]))
-        #     params[:, :weights.shape[1]] = weights
-        #     params[:, -self.path_log_params.shape[1]:] = self.path_log_params.data.numpy()
-        params = np.zeros((weights.shape[0], weights.shape[1] + 1))
-        params[:, :weights.shape[1]] = weights
-        params[:, -1] = weight_sum
-        return params
+        d = dict(**d, weights=weights)
+        if self.path_dist == Poisson:
+            d = dict(**d, rate=self.path_log_params.exp().data.numpy().copy())
+        elif self.path_dist == Geometric:
+            d = dict(**d, probs=self.path_log_params.sigmoid().data.numpy().copy())
+        elif self.path_dist == Gamma:
+            d = dict(**d, concentration=self.path_log_params[:, 0].exp().data.numpy().copy(),
+                     rate=self.path_log_params[:, 1].exp().data.numpy().copy())
+        elif self.path_dist == Binomial:
+            d = dict(**d,
+                     total_count = self.path_log_params[:, 0].exp().data.numpy().copy(),
+                     probs=self.path_log_params[:, 1].sigmoid().data.numpy().copy())
+        else:
+            raise RuntimeWarning("Failed Case")
+        return d
 
     def perform_diffusion(self):
         # float offset to n (hack e.g. for Gamma, which is not defined for n=0)
@@ -390,7 +448,9 @@ class FactorModel(DiffusionModel):
                                                     2), dtype=torch.float64)
 
     def get_interpretable_params(self):
-        return self.dist_log_params.exp().data.numpy().reshape(self.dist_log_params.shape[0], -1).copy()
+        d = super().get_interpretable_params()
+        return dict(**d,
+                    dist_params=self.dist_log_params.data.numpy().reshape(self.dist_log_params.shape[0], -1).copy())
 
     def perform_diffusion(self):
         # initialise distribution
@@ -473,7 +533,7 @@ class SimpleStaticDistributionModel(TonnetzModel):
         )[None, :]
 
     def get_interpretable_params(self):
-        return [[] for _ in range(self.n_data)]
+        return dict()
 
     def match_distributions(self):
         self.interval_class_distribution = self.interval_class_log_distribution.exp()
@@ -484,77 +544,24 @@ class StaticDistributionModel(TonnetzModel):
 
     def __init__(self,
                  n_profiles=1,
-                 max_iterations=1000):
-        super().__init__()
-        self.n_profiles = n_profiles
-        self.matched_key = None
+                 max_iterations=1000,
+                 *args, **kwargs):
+        super().__init__(latent_shape=(n_profiles,), *args, **kwargs)
         self.max_iterations = max_iterations
         self.interval_class_log_distribution = Parameter(torch.tensor([]))
-        self.beta = Parameter(torch.tensor([]))
-        self.neg_log_likes = None
 
     def set_data(self, *args, **kwargs):
         super().set_data(*args, **kwargs)
         # initialise distribution with mode at reference center
         log_dist = -((np.arange(self.n_dist_support) - self.reference_center) / self.n_dist_support * 10) ** 2
         # add some noise for the different profiles
-        all_log_dists = np.random.uniform(-1e-3, 1e-3, (self.n_dist_support, self.n_profiles))
+        all_log_dists = np.random.uniform(-1e-3, 1e-3, (self.n_dist_support, self.latent_shape[0]))
         all_log_dists += log_dist[:, None]
         self.interval_class_log_distribution.data = torch.from_numpy(all_log_dists[None, :])
-        self.beta.data = torch.tensor([1.])
-
-    def get_interpretable_params(self):
-        return [[self.beta.data.numpy()[0],
-                 self.matched_key[data_idx],
-                 self.matched_shift[data_idx]] for data_idx in range(self.n_data)]
 
     def match_distributions(self):
-        """
-        Marginalise out the latent variables (matched_key and transposition).
-
-        Also compute the MAP estimate for the latent variables by finding the optimal match.
-        """
-        # convert to normal representation
         self.interval_class_distribution = self.interval_class_log_distribution.exp()
-        # structurally similar body as parent function but also compute neg-log-likelihood
-        n_shifts = self.n_dist_support - self.n_interval_classes + 1
-        self.neg_log_likes = torch.zeros((self.n_data, n_shifts, self.n_profiles), dtype=torch.float64)
-        all_data_indices = np.arange(self.n_data)
-        for shift in range(n_shifts):
-            # keep profile dimension
-            dist = self.interval_class_distribution[:, shift:shift + self.n_interval_classes, :]
-            dist = dist / dist.sum(dim=1, keepdim=True)
-            # neg-log-likelihoods for all profiles (and all data as in parent function)
-            nll = self.dkl(self.data[..., None], dist, dim=1)
-            self.neg_log_likes[:, shift, :] = nll
-            matched_key = np.argmin(nll.data.numpy(), axis=1)
-            matched_dist = dist[0, :, matched_key].transpose(0, 1)
-            if shift == 0:
-                self.matched_key = matched_key
-                self.matched_dist = matched_dist
-                self.matched_loss = nll[all_data_indices, matched_key]
-                self.matched_shift = np.zeros(self.n_data, dtype=int)
-            else:
-                cond = nll[all_data_indices, matched_key] < self.matched_loss
-                self.matched_dist = torch.where(cond[:, None], matched_dist, self.matched_dist)
-                self.matched_loss = torch.where(cond, nll[all_data_indices, matched_key], self.matched_loss)
-                self.matched_shift = np.where(cond, shift, self.matched_shift)
-                self.matched_key = np.where(cond, matched_key, self.matched_key)
-
-    def _loss(self):
-        """
-        Same as parent function only that marginal likelihood is used as loss
-        """
-        self.match_distributions()
-        # compute posterior of latent variables
-        latent_log_posterior = -self.neg_log_likes * self.beta
-        latent_log_posterior = latent_log_posterior - latent_log_posterior.logsumexp(dim=(1, 2), keepdim=True)
-        # compute marginal neg-log-likelihood (per piece)
-        marginal_neg_log_like = -(-self.neg_log_likes + latent_log_posterior).logsumexp(dim=(1, 2))
-        if self.data_weights is None:
-            return marginal_neg_log_like.mean()
-        else:
-            return (marginal_neg_log_like * self.data_weights).sum()
+        super().match_distributions()
 
 
 class GaussianModel:
@@ -588,4 +595,4 @@ class GaussianModel:
                 self.mean.copy())
 
     def get_interpretable_params(self):
-        return np.sqrt(self.var)[:, None]
+        return dict(mean=self.mean.copy(), std=np.sqrt(self.var))

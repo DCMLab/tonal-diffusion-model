@@ -17,6 +17,7 @@ if __name__ == "__main__":
     do_train_models = True
     scipy_optimize = False
     do_separate_composers = True
+    soft_max = True
 
     if compact_data:
         df = pd.read_csv("tdm_data.tsv", sep='\t')
@@ -41,8 +42,8 @@ if __name__ == "__main__":
     # data to use
     raw_data = pd.concat([
         bach,
-        beethoven,
-        liszt,
+        # beethoven,
+        # liszt,
         # scriabin,
     ])
 
@@ -86,12 +87,19 @@ if __name__ == "__main__":
         trainable_models = [
             # (FactorModel(path_dist=Poisson), "Factor Model (Poisson)"),
             # (FactorModel(path_dist=Binomial), "Factor Model (Binomial)"),
-            (TonalDiffusionModel(path_dist=Poisson), "Diffusion Model (Poisson)"),
-            (TonalDiffusionModel(path_dist=Binomial), "Diffusion Model (Binomial)"),
-            (TonalDiffusionModel(path_dist=Binomial, interval_steps=(-1, 1)), "Diffusion Model (Binomial, 1D)"),
-            (StaticDistributionModel(n_profiles=1), "Static Model (1 profile)"),
-            (StaticDistributionModel(n_profiles=2), "Static Model (2 profiles)"),
-            (StaticDistributionModel(n_profiles=3), "Static Model (3 profiles)"),
+            #
+            (TonalDiffusionModel(path_dist=Poisson, soft_max_posterior=soft_max),
+             "Diffusion Model (Poisson)"),
+            (TonalDiffusionModel(path_dist=Binomial, soft_max_posterior=soft_max),
+             "Diffusion Model (Binomial)"),
+            (TonalDiffusionModel(path_dist=Binomial, soft_max_posterior=soft_max, interval_steps=(-1, 1)),
+             "Diffusion Model (Binomial, 1D)"),
+            (StaticDistributionModel(n_profiles=1, soft_max_posterior=soft_max),
+             "Static Model (1 profile)"),
+            (StaticDistributionModel(n_profiles=2, soft_max_posterior=soft_max),
+             "Static Model (2 profiles)"),
+            #
+            # (StaticDistributionModel(n_profiles=3), "Static Model (3 profiles)"),
             # (SimpleStaticDistributionModel(), "Simple Static Model"),
         ]
         non_trainable_models = [
@@ -120,14 +128,14 @@ if __name__ == "__main__":
             for model, name in trainable_models:
                 print(name)
                 loss = []
-                # optimizer = Adam(params=model.parameters(), lr=1e-2)
-                # delta_it = 100
-                # delta_loss = 1e-5
-                optimizer = Adam(params=model.parameters(), lr=1e-1)
-                delta_it = 50
-                delta_loss = 1e-3
+                optimizer = Adam(params=model.parameters(), lr=1e-2)
+                delta_it = 100
+                delta_loss = 1e-5
                 # optimizer = Adam(params=model.parameters(), lr=1e-1)
-                # delta_it = 10
+                # delta_it = 50
+                # delta_loss = 1e-3
+                # optimizer = Adam(params=model.parameters(), lr=1e-1)
+                # delta_it = 5
                 # delta_loss = 5e-1
                 do_break = False
                 # do_break = True
@@ -150,8 +158,6 @@ if __name__ == "__main__":
         print("loading models...")
         all_models = [(model, name) for name, model in torch.load("models.tar").items()]
         print("DONE")
-
-
 
     # set up plots and plot data
     sns.set_style("whitegrid")
@@ -187,7 +193,7 @@ if __name__ == "__main__":
     # width = 1 / (n_models + 1)
     width = 1 / n_models / 2
     for model_idx, (model, name) in enumerate(all_models):
-        print(name)
+        print(f"    {name}")
         (dist, loss, centers) = model.get_results()
         params = model.get_interpretable_params()
         df = pd.DataFrame(data=loss, columns=['loss'])
@@ -204,20 +210,23 @@ if __name__ == "__main__":
                 ax = axes[idx]
                 color = next(ax._get_lines.prop_cycler)['color']
                 # p = ", ".join([np.format_float_scientific(x, 2) for x in params[idx]])
-                p = " [" + ", ".join([str(np.round(x, 2)) for x in params[idx]]) + "] "
-                p = ""
+                # p = " [" + ", ".join([str(np.round(x, 2)) for x in params[idx]]) + "] "
+                p = " [" + ", ".join([f"{key}: {np.round(val[idx], 2)}" for key, val in params.items()]) + "] "
+                # p = " "
                 new_x = x + (model_idx - n_models / 2) * width
                 # ax.plot(dist[idx], '-o', label=f"{name} [{p}] ({np.format_float_scientific(loss[idx], 2)})")
                 ax.bar(new_x, dist[idx], width=width, linewidth=0, color=color,
                        # label=f"{name} {p} ({np.format_float_scientific(loss[idx], 2)})",
-                       label=f"{name}{p}({np.round(loss[idx], 2)})",
+                       label=f"{name}{p}({np.round(loss[idx], 3)})",
                        )
                 ax.plot(new_x, dist[idx], linewidth=0.3, color=color, solid_joinstyle='bevel')
                 ax.legend()
             print("    DONE")
     loss_df.to_csv("loss.csv")
     if do_plot_pieces:
+        print("    saving piece plots...")
         fig.savefig("pieces.pdf")
+        print("    DONE")
     print("DONE")
 
 
