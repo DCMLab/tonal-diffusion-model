@@ -8,13 +8,13 @@ from scipy.optimize import minimize
 import matplotlib.pyplot as plt
 from torch.optim import Adam
 
-from tonal_diffusion_model import TonalDiffusionModel, GaussianModel, StaticDistributionModel, FactorModel
+from tonal_diffusion_model import TonalDiffusionModel, GaussianModel, StaticDistributionModel, FactorModel, SimpleStaticDistributionModel
 
 if __name__ == "__main__":
 
     compact_data = True
     do_plot_pieces = True
-    do_train_models = False
+    do_train_models = True
     scipy_optimize = False
     do_separate_composers = True
 
@@ -40,8 +40,8 @@ if __name__ == "__main__":
 
     # data to use
     raw_data = pd.concat([
-        # bach,
-        # beethoven,
+        bach,
+        beethoven,
         liszt,
         # scriabin,
     ])
@@ -89,10 +89,13 @@ if __name__ == "__main__":
             (TonalDiffusionModel(path_dist=Poisson), "Diffusion Model (Poisson)"),
             (TonalDiffusionModel(path_dist=Binomial), "Diffusion Model (Binomial)"),
             (TonalDiffusionModel(path_dist=Binomial, interval_steps=(-1, 1)), "Diffusion Model (Binomial, 1D)"),
-            (StaticDistributionModel(), "Static Model"),
+            (StaticDistributionModel(n_profiles=1), "Static Model (1 profile)"),
+            (StaticDistributionModel(n_profiles=2), "Static Model (2 profiles)"),
+            (StaticDistributionModel(n_profiles=3), "Static Model (3 profiles)"),
+            # (SimpleStaticDistributionModel(), "Simple Static Model"),
         ]
         non_trainable_models = [
-            (GaussianModel(), "Gaussian Model"),
+            # (GaussianModel(), "Gaussian Model"),
         ]
         all_models = trainable_models + non_trainable_models
 
@@ -117,20 +120,22 @@ if __name__ == "__main__":
             for model, name in trainable_models:
                 print(name)
                 loss = []
-                optimizer = Adam(params=model.parameters(), lr=1e-2)
-                delta_it = 100
-                delta_loss = 1e-5
-                # optimizer = Adam(params=model.parameters(), lr=1e-1)
-                # delta_it = 50
-                # delta_loss = 1e-3
+                # optimizer = Adam(params=model.parameters(), lr=1e-2)
+                # delta_it = 100
+                # delta_loss = 1e-5
+                optimizer = Adam(params=model.parameters(), lr=1e-1)
+                delta_it = 50
+                delta_loss = 1e-3
                 # optimizer = Adam(params=model.parameters(), lr=1e-1)
                 # delta_it = 10
                 # delta_loss = 5e-1
+                do_break = False
+                # do_break = True
                 for it in range(10000):
                     loss.append(optimizer.step(closure=lambda: model.closure()))
                     print(f"iteration {it}")
                     print(f"    loss: {loss[-1]}")
-                    if it > delta_it and loss[-delta_it] - loss[-1] < delta_loss:
+                    if do_break or (it > delta_it and loss[-delta_it] - loss[-1] < delta_loss):
                         break
                 print(name)
                 # plt.plot(loss, '-o')
@@ -198,12 +203,15 @@ if __name__ == "__main__":
             for idx in range(n_plots):
                 ax = axes[idx]
                 color = next(ax._get_lines.prop_cycler)['color']
-                p = ", ".join([np.format_float_scientific(x, 2) for x in params[idx]])
+                # p = ", ".join([np.format_float_scientific(x, 2) for x in params[idx]])
+                p = " [" + ", ".join([str(np.round(x, 2)) for x in params[idx]]) + "] "
                 p = ""
                 new_x = x + (model_idx - n_models / 2) * width
                 # ax.plot(dist[idx], '-o', label=f"{name} [{p}] ({np.format_float_scientific(loss[idx], 2)})")
                 ax.bar(new_x, dist[idx], width=width, linewidth=0, color=color,
-                       label=f"{name} [{p}] ({np.format_float_scientific(loss[idx], 2)})")
+                       # label=f"{name} {p} ({np.format_float_scientific(loss[idx], 2)})",
+                       label=f"{name}{p}({np.round(loss[idx], 2)})",
+                       )
                 ax.plot(new_x, dist[idx], linewidth=0.3, color=color, solid_joinstyle='bevel')
                 ax.legend()
             print("    DONE")
