@@ -4,6 +4,7 @@ from torch.nn import Module, Parameter
 from torch.distributions.poisson import Poisson
 from torch.distributions.geometric import Geometric
 from torch.distributions.binomial import Binomial
+from torch.distributions.negative_binomial import NegativeBinomial
 from torch.distributions.gamma import Gamma
 
 
@@ -148,7 +149,7 @@ class TonnetzModel(IntervalClassModel):
         if self.soft_max_posterior:
             # compute posterior of latent variables
             latent_dims = tuple(range(1, len(self.neg_log_likes.shape)))  # including transposition/shift!
-            latent_log_posterior = -self.neg_log_likes * self.beta
+            latent_log_posterior = -self.neg_log_likes * self.beta.exp()
             latent_log_posterior = latent_log_posterior - latent_log_posterior.logsumexp(dim=latent_dims, keepdim=True)
             # compute marginal neg-log-likelihood (per piece)
             neg_log_like = -(-self.neg_log_likes + latent_log_posterior).logsumexp(dim=latent_dims)
@@ -169,7 +170,7 @@ class TonnetzModel(IntervalClassModel):
         self.n_dist_support = int(np.ceil((2 * self.margin + 1) * self.n_interval_classes))
         self.reference_center = int(np.round((self.margin + 0.5) * self.n_interval_classes))
         if self.soft_max_posterior:
-            self.beta.data = torch.tensor([1.])
+            self.beta.data = torch.tensor([0.])
 
     def get_interpretable_params(self):
         d = dict(
@@ -177,7 +178,7 @@ class TonnetzModel(IntervalClassModel):
             shift=self.matched_shift
         )
         if self.soft_max_posterior:
-            d = dict(**d, beta=[self.beta.data.numpy()[0] for _ in range(self.n_data)])
+            d = dict(**d, beta=[self.beta.exp().data.numpy()[0] for _ in range(self.n_data)])
         if self.matched_latent is not None:
             d = dict(**d, **{f"latent_{idx+1}": latent for idx, latent in enumerate(self.matched_latent)})
         return d
@@ -272,7 +273,7 @@ class TonalDiffusionModel(DiffusionModel):
 
     def __init__(self,
                  min_iterations=None,
-                 max_iterations=100,
+                 max_iterations=1000,
                  path_dist=Binomial,
                  *args,
                  **kwargs):
@@ -305,10 +306,16 @@ class TonalDiffusionModel(DiffusionModel):
         # initialise distribution parameters
         if self.path_dist in [Poisson, Geometric]:
             self.path_log_params.data = torch.zeros(self.n_data, dtype=torch.float64)
-        elif self.path_dist in [Gamma, Binomial]:
+        elif self.path_dist in [Gamma, Binomial, NegativeBinomial]:
              params = np.ones((self.n_data, 2), dtype=np.float64)
-             params[:, 0] *= 2
-             params[:, 1] *= -2
+             if self.path_dist == Gamma:
+                 params[:, 0] *= 2
+                 params[:, 1] *= -2
+             elif self.path_dist == Binomial:
+                 params[:, 0] *= 2
+                 params[:, 1] *= 0
+             else:
+                 params *= 0
              self.path_log_params.data = torch.from_numpy(params)
         else:
             raise RuntimeWarning("Failed Case")
@@ -325,7 +332,7 @@ class TonalDiffusionModel(DiffusionModel):
         elif self.path_dist == Gamma:
             d = dict(**d, concentration=self.path_log_params[:, 0].exp().data.numpy().copy(),
                      rate=self.path_log_params[:, 1].exp().data.numpy().copy())
-        elif self.path_dist == Binomial:
+        elif self.path_dist in [Binomial, NegativeBinomial]:
             d = dict(**d,
                      total_count = self.path_log_params[:, 0].exp().data.numpy().copy(),
                      probs=self.path_log_params[:, 1].sigmoid().data.numpy().copy())
@@ -353,6 +360,10 @@ class TonalDiffusionModel(DiffusionModel):
         elif self.path_dist == Gamma:
             path_length_dist = Gamma(concentration=self.path_log_params[:, 0].exp(),
                                      rate=self.path_log_params[:, 1].exp())
+        elif self.path_dist == NegativeBinomial:
+            total_count = self.path_log_params[:, 0].exp()
+            probs = self.path_log_params[:, 1].sigmoid()
+            path_length_dist = NegativeBinomial(total_count=total_count, probs=probs)
         elif self.path_dist == Binomial:
             total_count = self.path_log_params[:, 0].exp()
             total_count_floor = total_count.floor()
