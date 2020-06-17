@@ -121,6 +121,7 @@ class TonnetzModel(IntervalClassModel):
                  margin=0.5,
                  latent_shape=(),
                  soft_max_posterior=False,
+                 separate_parameters=False,
                  *args,
                  **kwargs):
         super().__init__()
@@ -132,7 +133,9 @@ class TonnetzModel(IntervalClassModel):
         self.n_dist_support = None
         self.latent_shape = latent_shape
         self.soft_max_posterior = soft_max_posterior
+        self.separate_parameters = separate_parameters
         self.reference_center = None
+        self.n_shifts = None
         self.interval_class_distribution = None
         self.data = None
         self.matched_dist = None
@@ -167,12 +170,18 @@ class TonnetzModel(IntervalClassModel):
     def set_data(self, *args, **kwargs):
         super().set_data(*args, **kwargs)
         # get necessary support of distribution and reference center
-        self.n_dist_support = int(np.ceil((2 * self.margin + 1) * self.n_interval_classes))
-        self.reference_center = int(np.round((self.margin + 0.5) * self.n_interval_classes))
+        if hasattr(self, "separate_parameters") and self.separate_parameters:
+            self.reference_center = None
+            self.n_dist_support = self.n_interval_classes
+            self.n_shifts = self.n_interval_classes
+        else:
+            self.n_dist_support = int(np.ceil((2 * self.margin + 1) * self.n_interval_classes))
+            self.reference_center = int(np.round((self.margin + 0.5) * self.n_interval_classes))
+            self.n_shifts = self.n_dist_support - self.n_interval_classes + 1
         if self.soft_max_posterior:
             self.beta.data = torch.tensor([0.])
 
-    def get_interpretable_params(self):
+    def get_interpretable_params(self, *args, **kwargs):
         d = dict(
             # loss=self.matched_loss.data.numpy().copy(),
             shift=self.matched_shift
@@ -185,46 +194,54 @@ class TonnetzModel(IntervalClassModel):
 
 
     def match_distributions(self):
-        n_shifts = self.n_dist_support - self.n_interval_classes + 1
-        self.neg_log_likes = torch.zeros((self.n_data, n_shifts) + self.latent_shape, dtype=torch.float64)
+        if hasattr(self, "n_shifts"):
+            n_shifts = self.n_shifts
+        else:
+            n_shifts = self.n_dist_support - self.n_interval_classes + 1
         all_data_indices = np.arange(self.n_data)
-        latent_none = tuple(None for _ in self.latent_shape)
-        latent_slice = tuple(slice(None) for _ in self.latent_shape)
-        # latent_dims = tuple(range(1, len(self.neg_log_likes.shape)))  # for matching after DKL
-        for shift in range(n_shifts):
-            # keep profile dimension
-            dist = self.interval_class_distribution[(slice(None),
-                                                     slice(shift, shift + self.n_interval_classes)) +
-                                                    latent_slice]
-            dist = dist / dist.sum(dim=1, keepdim=True)
-            # neg-log-likelihoods for all profiles (and all data as in parent function)
-            nll = self.dkl(self.data[(slice(None), slice(None)) + latent_none], dist, dim=1)
-            self.neg_log_likes[(slice(None), shift) + latent_slice] = nll
-            if self.latent_shape:
-                matched_latent = np.unravel_index(
-                    np.argmin(nll.data.numpy().reshape(self.n_data, -1), axis=1),
-                    self.latent_shape
-                )
-                matched_dist = dist[(0, slice(None)) + matched_latent].transpose(0, 1)
-            else:
-                matched_latent = ()
-                matched_dist = dist
-            matched_data_indices = (all_data_indices,) + matched_latent
-            if shift == 0:
-                self.matched_dist = matched_dist
-                self.matched_loss = nll[matched_data_indices]
-                self.matched_shift = np.zeros(self.n_data, dtype=int)
+        if hasattr(self, "separate_parameters") and self.separate_parameters:
+            self.neg_log_likes = self.dkl(self.data[:, :, None], self.interval_class_distribution[:, :, :], dim=1)
+            self.matched_shift = np.argmin(self.neg_log_likes.data.numpy(), axis=1)
+            self.matched_dist = self.interval_class_distribution[all_data_indices, :, self.matched_shift]
+            self.matched_loss = self.neg_log_likes[all_data_indices, self.matched_shift]
+        else:
+            self.neg_log_likes = torch.zeros((self.n_data, n_shifts) + self.latent_shape, dtype=torch.float64)
+            latent_none = tuple(None for _ in self.latent_shape)
+            latent_slice = tuple(slice(None) for _ in self.latent_shape)
+            for shift in range(n_shifts):
+                # keep profile dimension
+                dist = self.interval_class_distribution[(slice(None),
+                                                         slice(shift, shift + self.n_interval_classes)) +
+                                                        latent_slice]
+                dist = dist / dist.sum(dim=1, keepdim=True)
+                # neg-log-likelihoods for all profiles (and all data as in parent function)
+                nll = self.dkl(self.data[(slice(None), slice(None)) + latent_none], dist, dim=1)
+                self.neg_log_likes[(slice(None), shift) + latent_slice] = nll
                 if self.latent_shape:
-                    self.matched_latent = matched_latent
-            else:
-                cond = nll[matched_data_indices] < self.matched_loss
-                self.matched_dist = torch.where(cond[:, None], matched_dist, self.matched_dist)
-                self.matched_loss = torch.where(cond, nll[matched_data_indices], self.matched_loss)
-                self.matched_shift = np.where(cond, shift, self.matched_shift)
-                if self.latent_shape:
-                    self.matched_latent = np.where(cond, matched_latent, self.matched_latent)
+                    matched_latent = np.unravel_index(
+                        np.argmin(nll.data.numpy().reshape(self.n_data, -1), axis=1),
+                        self.latent_shape
+                    )
+                    matched_dist = dist[(0, slice(None)) + matched_latent].transpose(0, 1)
+                else:
+                    matched_latent = ()
+                    matched_dist = dist
+                matched_data_indices = (all_data_indices,) + matched_latent
+                if shift == 0:
+                    self.matched_dist = matched_dist
+                    self.matched_loss = nll[matched_data_indices]
+                    self.matched_shift = np.zeros(self.n_data, dtype=int)
+                    if self.latent_shape:
+                        self.matched_latent = matched_latent
+                else:
+                    cond = nll[matched_data_indices] < self.matched_loss
+                    self.matched_dist = torch.where(cond[:, None], matched_dist, self.matched_dist)
+                    self.matched_loss = torch.where(cond, nll[matched_data_indices], self.matched_loss)
+                    self.matched_shift = np.where(cond, shift, self.matched_shift)
+                    if self.latent_shape:
+                        self.matched_latent = np.where(cond, matched_latent, self.matched_latent)
 
-    def get_results(self):
+    def get_results(self, *args, **kwargs):
         """
         Compute model loss and return internal results
         :return: tuple of arrays (matched distribution, loss, center) containing results per data point
@@ -232,9 +249,14 @@ class TonnetzModel(IntervalClassModel):
         # compute everything
         self._loss()
         # return internal results
-        return (self.matched_dist.data.numpy().copy(),
-                self.matched_loss.data.numpy().copy(),
-                self.reference_center - self.matched_shift)
+        if hasattr(self, "separate_parameters") and self.separate_parameters:
+            return (self.matched_dist.data.numpy().copy(),
+                    self.matched_loss.data.numpy().copy(),
+                    self.matched_shift)
+        else:
+            return (self.matched_dist.data.numpy().copy(),
+                    self.matched_loss.data.numpy().copy(),
+                    self.reference_center - self.matched_shift)
 
 
 class DiffusionModel(TonnetzModel):
@@ -247,8 +269,16 @@ class DiffusionModel(TonnetzModel):
     def set_data(self, *args, **kwargs):
         super().set_data(*args, **kwargs)
         # initialise interval class distributions with single tonal center
-        self.init_interval_class_distribution = np.zeros((self.n_data, self.n_dist_support))
-        self.init_interval_class_distribution[:, self.reference_center] = 1
+        if hasattr(self, "separate_parameters") and self.separate_parameters:
+            self.init_interval_class_distribution = np.zeros((self.n_data,
+                                                              self.n_interval_classes,
+                                                              self.n_interval_classes))
+            self.init_interval_class_distribution[:,
+            np.arange(self.n_interval_classes),
+            np.arange(self.n_interval_classes)] = 1
+        else:
+            self.init_interval_class_distribution = np.zeros((self.n_data, self.n_dist_support))
+            self.init_interval_class_distribution[:, self.reference_center] = 1
         self.init_interval_class_distribution = torch.from_numpy(self.init_interval_class_distribution)
         # init transition matrix
         self.transition_matrix = np.zeros((self.n_dist_support, self.n_dist_support, self.n_interval_steps))
@@ -295,47 +325,92 @@ class TonalDiffusionModel(DiffusionModel):
         if self.min_iterations is None:
             largest_step_down = -min(np.min(self.interval_steps), 0)
             largest_step_up = max(np.max(self.interval_steps), 0)
-            self.effective_min_iterations = int(np.ceil(max(
-                self.reference_center / largest_step_down,
-                (self.n_dist_support - self.reference_center) / largest_step_up
-            ))) + 1
+            if hasattr(self, "separate_parameters") and self.separate_parameters:
+                self.effective_min_iterations = int(np.ceil(
+                    self.n_interval_classes / min(largest_step_up, largest_step_down)
+                )) + 1
+            else:
+                self.effective_min_iterations = int(np.ceil(max(
+                    self.reference_center / largest_step_down,
+                    (self.n_dist_support - self.reference_center) / largest_step_up
+                ))) + 1
         else:
             self.effective_min_iterations = self.min_iterations
         # initialise weights
-        self.log_interval_step_weights.data = torch.zeros((self.n_data, self.n_interval_steps), dtype=torch.float64)
+        if hasattr(self, "separate_parameters") and self.separate_parameters:
+            self.log_interval_step_weights.data = torch.zeros((self.n_data, self.n_interval_steps, self.n_shifts),
+                                                              dtype=torch.float64)
+        else:
+            self.log_interval_step_weights.data = torch.zeros((self.n_data, self.n_interval_steps),
+                                                              dtype=torch.float64)
         # initialise distribution parameters
+        # default values
         if self.path_dist in [Poisson, Geometric]:
-            self.path_log_params.data = torch.zeros(self.n_data, dtype=torch.float64)
+            default_params = [0]
+            # np.torch.zeros(self.n_data, dtype=torch.float64)
         elif self.path_dist in [Gamma, Binomial, NegativeBinomial]:
-             params = np.ones((self.n_data, 2), dtype=np.float64)
+             # default_params = np.ones(2, dtype=np.float64)
              if self.path_dist == Gamma:
-                 params[:, 0] *= 2
-                 params[:, 1] *= -2
+                 default_params = [2, -2]
+                 # default_params[:, 0] *= 2
+                 # default_params[:, 1] *= -2
              elif self.path_dist == Binomial:
-                 params[:, 0] *= 2
-                 params[:, 1] *= 0
+                 default_params = [2, 0]
+                 # default_params[:, 0] *= 2
+                 # default_params[:, 1] *= 0
              else:
-                 params *= 0
-             self.path_log_params.data = torch.from_numpy(params)
+                 default_params = [0, 0]
+                 # default_params *= 0
+             # self.path_log_params.data = torch.from_numpy(default_params)
         else:
             raise RuntimeWarning("Failed Case")
+        default_params = np.array(default_params, dtype=np.float64)
+        # fill
+        if hasattr(self, "separate_parameters") and self.separate_parameters:
+            full_params = np.zeros((self.n_data, len(default_params), self.n_shifts), dtype=np.float64)
+            full_params[...] = default_params[None, :, None]
+        else:
+            full_params = np.zeros((self.n_data, len(default_params)), dtype=np.float64)
+            full_params[...] = default_params[None, :]
+        self.path_log_params.data = torch.from_numpy(full_params)
 
-    def get_interpretable_params(self):
+    def get_results(self, shifts=None, *args, **kwargs):
+        ret = super().get_results(*args, **kwargs)
+        if shifts is None:
+            return ret
+        else:
+            return (self.interval_class_distribution[np.arange(self.n_data), :, shifts].data.numpy().copy(),
+                    self.neg_log_likes[np.arange(self.n_data), shifts].data.numpy().copy(),
+                    shifts)
+
+    def get_interpretable_params(self, shifts=None, *args, **kwargs):
+        if shifts is None:
+            shifts = self.matched_shift
+        # init from super
         d = super().get_interpretable_params()
-        weight_sum = self.log_interval_step_weights.exp().sum(dim=1).data.numpy()
-        weights = self.log_interval_step_weights.exp().data.numpy() / weight_sum[:, None]
+        # select correct parameters in case of separate parameters
+        if hasattr(self, "separate_parameters") and self.separate_parameters:
+            path_log_params = self.path_log_params[np.arange(self.n_data), :, shifts]
+            log_interval_step_weights = self.log_interval_step_weights[np.arange(self.n_data), :, shifts]
+        else:
+            log_interval_step_weights = self.log_interval_step_weights
+            path_log_params = self.path_log_params
+        # compute and add normalised weights
+        weight_sum = log_interval_step_weights.exp().sum(dim=1).data.numpy()
+        weights = log_interval_step_weights.exp().data.numpy() / weight_sum[:, None]
         d = dict(**d, weights=weights)
+        # format path parameters
         if self.path_dist == Poisson:
-            d = dict(**d, rate=self.path_log_params.exp().data.numpy().copy())
+            d = dict(**d, rate=path_log_params.exp().data.numpy().copy())
         elif self.path_dist == Geometric:
-            d = dict(**d, probs=self.path_log_params.sigmoid().data.numpy().copy())
+            d = dict(**d, probs=path_log_params.sigmoid().data.numpy().copy())
         elif self.path_dist == Gamma:
-            d = dict(**d, concentration=self.path_log_params[:, 0].exp().data.numpy().copy(),
-                     rate=self.path_log_params[:, 1].exp().data.numpy().copy())
+            d = dict(**d, concentration=path_log_params[:, 0].exp().data.numpy().copy(),
+                     rate=path_log_params[:, 1].exp().data.numpy().copy())
         elif self.path_dist in [Binomial, NegativeBinomial]:
             d = dict(**d,
-                     total_count = self.path_log_params[:, 0].exp().data.numpy().copy(),
-                     probs=self.path_log_params[:, 1].sigmoid().data.numpy().copy())
+                     total_count = path_log_params[:, 0].exp().data.numpy().copy(),
+                     probs=path_log_params[:, 1].sigmoid().data.numpy().copy())
         else:
             raise RuntimeWarning("Failed Case")
         return d
@@ -392,7 +467,7 @@ class TonalDiffusionModel(DiffusionModel):
             assert not np.any(np.isclose(normalisation.data.numpy(), 0)), normalisation.data.numpy().tolist()
             path_length_dist_arr = path_length_dist_arr / normalisation
         # cumulative sum to track convergence
-        cum_path_length_prob = torch.zeros(self.n_data, dtype=torch.float64)
+        cum_path_length_prob = None
         # get interval step probabilities
         interval_step_log_probs = self.log_interval_step_weights - \
                                   self.log_interval_step_weights.logsumexp(dim=1, keepdim=True)
@@ -406,17 +481,31 @@ class TonalDiffusionModel(DiffusionModel):
                 step_prob = path_length_dist_arr[n]
             else:
                 step_prob = path_length_dist_func(torch.tensor(n, dtype=torch.float64))
-            # update output distributions (marginalise path length)
-            self.interval_class_distribution = self.interval_class_distribution + \
-                                               step_prob[:, None] * running_interval_class_distribution
-            # perform transition (marginalise interval classes)
-            # intermediate tensor has dimensions:
-            # (n_data, n_dist_support, n_dist_support, n_interval_steps) = (data, from, to, interval)
-            running_interval_class_distribution = torch.einsum("fti,di,df->dt",
-                                                               self.transition_matrix,
-                                                               interval_step_log_probs.exp(),
-                                                               running_interval_class_distribution)
+            if hasattr(self, "separate_parameters") and self.separate_parameters:
+                # update output distributions (marginalise path length)
+                self.interval_class_distribution = self.interval_class_distribution + \
+                                                   step_prob[:, None, :] * running_interval_class_distribution
+                # perform transition (marginalise interval classes)
+                # intermediate tensor has dimensions:
+                # (n_data, n_dist_support, n_dist_support, n_interval_steps, n_shifts) = (data, from, to, interval, shift)
+                running_interval_class_distribution = torch.einsum("fti,dis,dfs->dts",
+                                                                   self.transition_matrix,
+                                                                   interval_step_log_probs.exp(),
+                                                                   running_interval_class_distribution)
+            else:
+                # update output distributions (marginalise path length)
+                self.interval_class_distribution = self.interval_class_distribution + \
+                                                   step_prob[:, None] * running_interval_class_distribution
+                # perform transition (marginalise interval classes)
+                # intermediate tensor has dimensions:
+                # (n_data, n_dist_support, n_dist_support, n_interval_steps) = (data, from, to, interval)
+                running_interval_class_distribution = torch.einsum("fti,di,df->dt",
+                                                                   self.transition_matrix,
+                                                                   interval_step_log_probs.exp(),
+                                                                   running_interval_class_distribution)
             # update cumulative
+            if cum_path_length_prob is None:
+                cum_path_length_prob = torch.zeros_like(step_prob)
             cum_path_length_prob = cum_path_length_prob + step_prob
             if n >= self.effective_min_iterations and np.allclose(cum_path_length_prob.data.numpy(), 1):
                 print(f"break after {n+1} iterations")
@@ -458,7 +547,7 @@ class FactorModel(DiffusionModel):
                                                     self.n_interval_steps,
                                                     2), dtype=torch.float64)
 
-    def get_interpretable_params(self):
+    def get_interpretable_params(self, *args, **kwargs):
         d = super().get_interpretable_params()
         return dict(**d,
                     dist_params=self.dist_log_params.data.numpy().reshape(self.dist_log_params.shape[0], -1).copy())
@@ -543,7 +632,7 @@ class SimpleStaticDistributionModel(TonnetzModel):
             -((np.arange(self.n_dist_support) - self.reference_center) / self.n_dist_support * 10) ** 2
         )[None, :]
 
-    def get_interpretable_params(self):
+    def get_interpretable_params(self, *args, **kwargs):
         return dict()
 
     def match_distributions(self):
