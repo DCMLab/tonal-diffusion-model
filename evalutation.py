@@ -17,20 +17,29 @@ from tonal_diffusion_model import TonalDiffusionModel, GaussianModel, StaticDist
 if __name__ == "__main__":
 
     compact_data = True
+
+    # do_train_models = True
+    do_train_models = False
+    scipy_optimize = False
+    # soft_max = None
+    soft_max = True
+    # soft_max = False
+
+    suffix = " new"
+    # suffix = " hard new init"
+
+    # only for separate parameters
+    # plot_neg_log_likes = True
+    plot_neg_log_likes = False
+    # plot_all_shifts = True
+    plot_all_shifts = False
+
     # do_plot_all_pieces = True
     do_plot_all_pieces = False
     do_plot_single_pieces = True
     # do_plot_single_pieces = False
     # do_plot_draft = True
     do_plot_draft = False
-    # do_train_models = True
-    do_train_models = False
-    scipy_optimize = False
-    do_separate_composers = True
-    # soft_max = None
-    soft_max = True
-    # soft_max = False
-    suffix = " soft"
     # do_show_learning_curves = True
     do_show_learning_curves = False
     do_save_learning_curves = True
@@ -39,16 +48,16 @@ if __name__ == "__main__":
     # allow_model_rename = False
     # plot_empirical_as_background = True
     plot_empirical_as_background = False
-    plot_params = True
-    # plot_params = False
+    # plot_params = True
+    plot_params = False
+    # do_plot_tiles = True
+    do_plot_tiles = False
+    do_separate_composers = True
+    # do_merge_composers = True
+    do_merge_composers = False
 
-    # for separate parameters
-    # plot_neg_log_likes = True
-    plot_neg_log_likes = False
-    # plot_all_shifts = True
-    plot_all_shifts = False
-
-    def set_plot_style():
+    def set_piece_plot_style():
+        sns.set()
         # plt.style.use("ggplot")
         sns.set_style("whitegrid")
         # sns.set_palette(sns.hls_palette(5, l=.3, s=.8))
@@ -64,8 +73,17 @@ if __name__ == "__main__":
                                            "#E3A00B",
                                            "#C71B08"]))
 
+
+    def set_box_plot_style():
+        sns.set()
+        # plt.style.use("ggplot")
+        sns.set_style("whitegrid")
+        # sns.set_palette(sns.color_palette("deep"))
+
     if compact_data:
-        df = pd.read_csv("tdm_data.tsv", sep='\t')
+        df = pd.read_csv("corpus.tsv", sep='\t')
+        fix_df = pd.read_csv("tdm_data.tsv", sep='\t')
+        fixed_piece_indices = fix_df[fix_df['filename'].isin(df['filename'])].index.values
 
         # select pieces (tpc counts + metadata)
         bach = df[df.composer == "Bach"]
@@ -96,6 +114,7 @@ if __name__ == "__main__":
     # raw_data = raw_data[raw_data['filename'] == "210606-Prelude_No._1_BWV_846_in_C_Major.mxl.csv"]
     # raw_data = raw_data[raw_data['filename'] == "56997-Sonate_No._17_Tempest_1st_Movement.mxl.csv"]
     # raw_data = raw_data[raw_data['filename'] == "Liszt_Lugubre_gondola_I_200_1.mxl.csv"]
+    # raw_data = raw_data[raw_data['filename'] == "Liszt_-_Bndiction_de_Dieu_dans_la_Solitude.mscz.mxl.csv"]
 
 
     # weight composers equally
@@ -144,22 +163,25 @@ if __name__ == "__main__":
         #  "Diffusion Model (Neg. Binomial)",
         #  dict(lr=4e-1, init_lr=4e-1, lr_beta=0.95)),
         #
-        # (StaticDistributionModel(n_profiles=1, soft_max_posterior=True if soft_max is None else soft_max),
-        #  "Static (1 profile)", "Static\n(1 profile)",
-        #  dict(lr=2e-1)),
-        # (StaticDistributionModel(n_profiles=2, soft_max_posterior=True if soft_max is None else soft_max),
-        #  "Static (2 profiles)", "Static\n(2 profiles)",
-        #  dict(lr=2e-1)),
-        # (TonalDiffusionModel(path_dist=Binomial, soft_max_posterior=False if soft_max is None else soft_max,
-        #                      interval_steps=(-1, 1)),
-        #  "TDM (Binomial, 1D)", "TDM\n(Binomial, 1D)",
-        #  dict(lr=4e-2, init_lr=1e-2, lr_beta=0.95)),
-        # (TonalDiffusionModel(path_dist=Poisson, soft_max_posterior=False if soft_max is None else soft_max),
-        #  "TDM (Poisson)", "TDM\n(Poisson)",
-        #  dict(lr=2e-1)),
+        (StaticDistributionModel(n_profiles=1, soft_max_posterior=True if soft_max is None else soft_max),
+         "Static (1 profile)", "Static\n(1 profile)",
+         dict(defaults=dict(lr=2e-1))),
+        (StaticDistributionModel(n_profiles=2, soft_max_posterior=True if soft_max is None else soft_max),
+         "Static (2 profiles)", "Static\n(2 profiles)",
+         dict(defaults=dict(lr=2e-1))),
+        (TonalDiffusionModel(path_dist=Binomial, soft_max_posterior=False if soft_max is None else soft_max,
+                             interval_steps=(-1, 1)),
+         "TDM (Binomial, 1D)", "TDM\n(Binomial, 1D)",
+         dict(defaults=dict(lr=4e-2, init_lr=1e-2, lr_beta=0.95))),
+        (TonalDiffusionModel(path_dist=Poisson, soft_max_posterior=False if soft_max is None else soft_max),
+         "TDM (Poisson)", "TDM\n(Poisson)",
+         dict(defaults=dict(lr=2e-1))),
         (TonalDiffusionModel(path_dist=Binomial, soft_max_posterior=False if soft_max is None else soft_max),
          "TDM (Binomial)", "TDM\n(Binomial)",
-         dict(defaults=dict(lr=5e-2, init_lr=1e-2, lr_beta=0.95), beta=dict(lr=1e-2, init_lr=1e-2, lr_beta=0.99))),
+         # dict(defaults=dict(lr=5e-2, init_lr=1e-2, lr_beta=0.95), beta=dict(lr=1e-2, init_lr=1e-2, lr_beta=0.99))
+         dict(defaults=dict(lr=5e-2, init_lr=5e-1, lr_beta=0.95))
+         # dict(defaults=dict(lr=5e-1, init_lr=1e-2, lr_beta=0.999))
+         ),
         #
         # (TonalDiffusionModel(path_dist=Binomial, soft_max_posterior=True, separate_parameters=True),
         #  "TDM (Binomial, Separate)", "TDM\n(Binomial, Sep.)",
@@ -254,19 +276,23 @@ if __name__ == "__main__":
                 all_models[model_idx] = (old_model, name, label, old_params)
             else:
                 all_models[model_idx] = (old_model, old_name, old_params)
+            # print(all_models)
+            # print(all_models[0][0].soft_max_posterior)
+            # exit()
             print("DONE")
 
     # set up plots and plot data
-    set_plot_style()
+    set_piece_plot_style()
     x = np.arange(data.shape[1])
     if do_plot_all_pieces or do_plot_single_pieces:
         print("set up plots and plot data...")
         n_plots = data.shape[0]
         if plot_empirical_as_background:
             width = 15
+            height = 5
         else:
-            width = 10
-        height = 5
+            width = 7
+            height = 3
         if do_plot_all_pieces:
             fig_all_pieces, axes_all_pieces = plt.subplots(n_plots, 1, figsize=(width, height * n_plots),
                                                            gridspec_kw=dict(left=0.05,
@@ -309,7 +335,8 @@ if __name__ == "__main__":
                            label="empirical")
                 ax.tick_params(axis='x', rotation=90)
                 ax.grid(False, axis='x')
-                ax.set_title(titles[idx])
+                if do_plot_tiles:
+                    ax.set_title(titles[idx])
                 ax.set_xticks(range(len(labels)))
                 ax.set_xticklabels(labels)
                 ax.set_xlim(min(x), max(x))
@@ -334,6 +361,13 @@ if __name__ == "__main__":
             params = model.get_interpretable_params(shifts=shifts)
             # print(params)
             # collect loss
+            if len(loss) == len(raw_data['composer']):
+                use_pice_indices = slice(None)
+            else:
+                use_pice_indices = fixed_piece_indices
+                dist = dist[fixed_piece_indices]
+                loss = loss[fixed_piece_indices]
+                centers = centers[fixed_piece_indices]
             df = pd.DataFrame(data=loss, columns=['loss'])
             df["model"] = name
             df["model_label"] = label
@@ -345,9 +379,11 @@ if __name__ == "__main__":
             for key, val in params.items():
                 if isinstance(val, np.ndarray) and len(val.shape) == 2:
                     for i in range(val.shape[1]):
-                        df[f"{key}_{i}"] = val[:, i]
+                        df[f"{key}_{i}"] = val[:, i][use_pice_indices]
                 else:
-                    df[key] = val
+                    print(key)
+                    print(use_pice_indices)
+                    df[key] = val[use_pice_indices]
             if results_df is None:
                 results_df = df
             else:
@@ -389,19 +425,20 @@ if __name__ == "__main__":
                                 # ax.fill_between(x, 0, dist[idx], color=color, alpha=0.1)
                             else:
                                 linewidth = 1
-                            ax.plot(x, dist[idx], '-o', linewidth=linewidth, markersize=4, color=color,
+                            ax.plot(x, dist[idx], '-o', linewidth=linewidth, markersize=3, color=color,
                                     label=f"{name}{p}[{np.round(loss[idx], 3)}]")
                         if plot_neg_log_likes:
                             post_center = (-model.neg_log_likes[idx]).exp().data.numpy()
                             post_center /= post_center.sum()
                             ax.plot(x, post_center, '--', linewidth=1, markersize=2, color=color)
-                        ax.legend()
+                        ax.legend(loc="upper left")
                 print("    DONE")
     # calculate mean values and variances
-    results_df['binomial_mean'] = results_df['total_count'].values * results_df['probs'].values
-    results_df['binomial_std'] = np.sqrt(results_df['total_count'].values *
-                                         results_df['probs'].values *
-                                         (1 - results_df['probs'].values))
+    if 'total_count' in results_df.columns:
+        results_df['binomial_mean'] = results_df['total_count'].values * results_df['probs'].values
+        results_df['binomial_std'] = np.sqrt(results_df['total_count'].values *
+                                             results_df['probs'].values *
+                                             (1 - results_df['probs'].values))
     results_df.to_csv(f"results{suffix}.csv")
     if do_plot_all_pieces:
         print("    saving pieces in single plot...")
@@ -418,13 +455,19 @@ if __name__ == "__main__":
 
 
     # box plots
+    if do_merge_composers:
+        print("merging composers...")
+        results_df_orig = results_df.copy()
+        results_df["composer"] = "all"
+        results_df = pd.concat([results_df_orig, results_df])
+        print("DONE")
     print("plotting statistics...")
-    set_plot_style()
+    set_box_plot_style()
     fig_box, ax_box = plt.subplots(1, 1, figsize=(1.1 * len(all_models), 3.5))
-    box_markersize = 4
+    box_markersize = 2
     swarm_markersize = 1.2
     box_kwargs = dict(linewidth=1,
-                      showfliers=False,
+                      showfliers=True,
                       showmeans=True,
                       meanline=True,
                       meanprops=dict(color=(0.8, 0, 0)))
@@ -440,6 +483,7 @@ if __name__ == "__main__":
                   size=swarm_markersize, **swarm_kwargs, add_legend=False)
     ax_box.set_ylabel("cross-entropy")
     ax_box.set_xlabel(None)
+    ax_box.legend(loc="upper right")
     # ax_box.set_yscale('log')
     fig_box.tight_layout()
     fig_box.savefig("box_plots" + suffix + ".pdf")

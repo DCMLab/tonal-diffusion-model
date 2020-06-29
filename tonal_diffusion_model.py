@@ -337,16 +337,21 @@ class TonalDiffusionModel(DiffusionModel):
         else:
             self.effective_min_iterations = self.min_iterations
         # initialise weights
-        if hasattr(self, "separate_parameters") and self.separate_parameters:
-            self.log_interval_step_weights.data = torch.zeros((self.n_data, self.n_interval_steps, self.n_shifts),
-                                                              dtype=torch.float64)
+        if self.n_interval_steps == 6:
+            weights = np.array([3, 3, 0, 0, 0, 0], dtype=np.float64)
         else:
-            self.log_interval_step_weights.data = torch.zeros((self.n_data, self.n_interval_steps),
-                                                              dtype=torch.float64)
+            weights = np.zeros(self.n_interval_steps, dtype=np.float64)
+        if hasattr(self, "separate_parameters") and self.separate_parameters:
+            full_weights = np.zeros((self.n_data, self.n_interval_steps, self.n_shifts), dtype=np.float64)
+            full_weights[:, :, :] = weights[None, :, None]
+        else:
+            full_weights = np.zeros((self.n_data, self.n_interval_steps), dtype=np.float64)
+            full_weights[:, :] = weights[None, :]
+        self.log_interval_step_weights.data = torch.from_numpy(full_weights)
         # initialise distribution parameters
         # default values
         if self.path_dist in [Poisson, Geometric]:
-            default_params = [0]
+            default_params = [1]
             # np.torch.zeros(self.n_data, dtype=torch.float64)
         elif self.path_dist in [Gamma, Binomial, NegativeBinomial]:
              # default_params = np.ones(2, dtype=np.float64)
@@ -429,9 +434,12 @@ class TonalDiffusionModel(DiffusionModel):
             epsilon = 0
         # path length distribution
         if self.path_dist == Poisson:
+            # for new models
+            # path_length_dist = Poisson(rate=self.path_log_params.exp()[:, 0])
+            # for old models
             path_length_dist = Poisson(rate=self.path_log_params.exp())
         elif self.path_dist == Geometric:
-            path_length_dist = Geometric(probs=self.path_log_params.sigmoid())
+            path_length_dist = Geometric(probs=self.path_log_params.sigmoid()[:, 0])
         elif self.path_dist == Gamma:
             path_length_dist = Gamma(concentration=self.path_log_params[:, 0].exp(),
                                      rate=self.path_log_params[:, 1].exp())
