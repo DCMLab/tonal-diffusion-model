@@ -36,8 +36,8 @@ if __name__ == "__main__":
 
     # do_plot_all_pieces = True
     do_plot_all_pieces = False
-    do_plot_single_pieces = True
-    # do_plot_single_pieces = False
+    # do_plot_single_pieces = True
+    do_plot_single_pieces = False
     # do_plot_draft = True
     do_plot_draft = False
     # do_show_learning_curves = True
@@ -481,7 +481,7 @@ if __name__ == "__main__":
                   # color=".25",
                   color=(0, 0, 0, 0.1),
                   size=swarm_markersize, **swarm_kwargs, add_legend=False)
-    ax_box.set_ylabel("cross-entropy")
+    ax_box.set_ylabel("Kullback-Leibler Divergence")
     ax_box.set_xlabel(None)
     ax_box.legend(loc="upper right")
     # ax_box.set_yscale('log')

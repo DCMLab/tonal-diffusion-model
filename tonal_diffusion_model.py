@@ -414,7 +414,7 @@ class TonalDiffusionModel(DiffusionModel):
                      rate=path_log_params[:, 1].exp().data.numpy().copy())
         elif self.path_dist in [Binomial, NegativeBinomial]:
             d = dict(**d,
-                     total_count = path_log_params[:, 0].exp().data.numpy().copy(),
+                     total_count=path_log_params[:, 0].exp().data.numpy().copy(),
                      probs=path_log_params[:, 1].sigmoid().data.numpy().copy())
         else:
             raise RuntimeWarning("Failed Case")
